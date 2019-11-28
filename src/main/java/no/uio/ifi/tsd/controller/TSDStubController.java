@@ -279,11 +279,6 @@ public class TSDStubController {
 		return resumables;
 	}
 
-	private void validateUploadId() {
-		// TODO Auto-generated method stub
-
-	}
-
 	private File saveChunk(File uploadFolder, String chunk, String filename, byte[] content) {
 		File chunkFile = new File(uploadFolder, String.format(filename + ".chunk.%s", chunk));
 
