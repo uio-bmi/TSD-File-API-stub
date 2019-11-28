@@ -182,19 +182,21 @@ public class TSDStubController {
 		if (chunk.equals("1")) {
 			log.info("initializing chunk");
 			File chunkFile = saveChunk(uploadFolder, filename, content);
-			resumableUpload = updateResumableUpload(resumableUpload, chunkFile);
+			resumableUpload=updateResumableUpload(resumableUpload, chunkFile);
 			resumableChunks.getResumables().add(resumableUpload);
 		} else if ("end".equalsIgnoreCase(chunk)) {
 			log.info("finalizing chunk");
-			validateUploadId();
 			finalizeChunks(uploadFolder, filename);
 		} else {
 			log.info("Upload chunks");
-			validateUploadId();
 			resumableUpload = getResumableUpload(id, resumableChunks);
-			resumableUpload.setMaxChunk(new BigInteger(chunk));
+			BigInteger maxChunk = new BigInteger(chunk);
+			if(!maxChunk.subtract(resumableUpload.getMaxChunk()).equals(BigInteger.ONE)) {
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(createJsonMessage("chunk_order_incorrect"));
+			}
+			resumableUpload.setMaxChunk(maxChunk);
 			File chunkFile = saveChunk(uploadFolder, chunk, resumableUpload.getFileName(), content);
-			resumableUpload = updateResumableUpload(resumableUpload, chunkFile);
+			resumableUpload=updateResumableUpload(resumableUpload, chunkFile);
 			log.info(resumableChunks.toString());
 			resumableChunks = updateResumableChunks(resumableChunks, resumableUpload, newChunk);
 			log.info(resumableChunks.toString());
@@ -216,7 +218,7 @@ public class TSDStubController {
 		if (resumableUpload.getMaxChunk().equals(BigInteger.ONE)) {
 			resumableUpload.setPreviousOffset(BigInteger.ZERO);
 			resumableUpload.setNextOffset(BigInteger.valueOf(length));
-		} else {
+		}else {
 			resumableUpload.setPreviousOffset(resumableUpload.getNextOffset());
 			resumableUpload.setNextOffset(resumableUpload.getNextOffset().add(BigInteger.valueOf(length)));
 		}
@@ -260,22 +262,19 @@ public class TSDStubController {
 	}
 
 	private ResumableUploads readResumableChunks(String project) {
-		ResumableUploads resumables = new ResumableUploads();
+		ResumableUploads resumables=null;
 		File resumablesPAth = new File(getResumablesPAth(project));
 		if (resumablesPAth.exists()) {
 			log.info("read resumable");
 			try (Reader reader = new FileReader(resumablesPAth)) {
-
-				resumables = gson.fromJson(reader, ResumableUploads.class);
-
+				 resumables = gson.fromJson(reader, ResumableUploads.class);
 				log.info((resumables.toString()));
-
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		} else {
 			log.info("create new resumable");
-			resumables.setResumables(new ArrayList<ResumableUpload>());
+			 resumables = new ResumableUploads();
 		}
 		return resumables;
 	}

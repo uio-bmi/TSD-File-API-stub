@@ -1,5 +1,6 @@
 package no.uio.ifi.tsd;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
@@ -19,18 +20,26 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
+import com.google.gson.Gson;
+
+import lombok.extern.slf4j.Slf4j;
 import no.uio.ifi.tsd.controller.TSDStubController;
 import no.uio.ifi.tsd.enums.TokenType;
+import no.uio.ifi.tsd.model.Chunk;
 
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
 @AutoConfigureMockMvc
+@Slf4j
 public class TSDStubControllerTests {
 
 	private static final String API_PROJECT = "https://api.tsd.usit.no/v1/p11";
 	@Autowired
 	private MockMvc mockMvc;
+
+	private Gson gson = new Gson();
 
 	@Test
 	public void givenFullRequestwhenTSDThenToken() throws Exception {
@@ -111,6 +120,30 @@ public class TSDStubControllerTests {
 						"Bearer eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOm51bGwsImV4cCI6MTU3NDE3NzUwMiwiZ3JvdXBzIjpbInAxMS1hbWdhZHNoLWdyb3VwIiwicDExLW1lbWJlci1ncm91cCIsInAxMS1leHBvcnQtZ3JvdXAiXSwicGlkIjpudWxsLCJwcm9qIjoicDExIiwiciI6IiQyYiQxMiRHQ3c4MUJYQ0JkMFcwUldwRWtrNmtPcTJ5Sm5VMzIud2VJRnYxbWxVWlA3a083UW1HbFVxLiIsInJvbGUiOiJpbXBvcnRfdXNlciIsInUiOiIkMmIkMTIkd2NibGRVaVJLcE1haTUxZ3Vld0hHLi5VNlBPbEV0cUl2V0RkWnBkbC55SWRTcHgwaDQuREsiLCJ1c2VyIjoicDExLWFtZ2Fkc2gifQ.IWwbjrr1AVMThLErPqOzBs5Oo_9oRaLUcLKnozpzdiw"))
 				.andDo(print()).andExpect(status().isOk())
 				.andExpect(jsonPath("$.message").value(TSDStubController.STREAM_PROCESSING_FAILED));
+	}
+
+	@Test
+	public void givenChunkWhenfileStreamChunkThenPass() throws Exception {
+		File testFile = createTempFile();
+
+		ResultActions result = this.mockMvc.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=1")
+				.content(new FileInputStream(testFile).readAllBytes())
+				.header("authorization",
+						"Bearer eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOm51bGwsImV4cCI6MTU3NDE3NzUwMiwiZ3JvdXBzIjpbInAxMS1hbWdhZHNoLWdyb3VwIiwicDExLW1lbWJlci1ncm91cCIsInAxMS1leHBvcnQtZ3JvdXAiXSwicGlkIjpudWxsLCJwcm9qIjoicDExIiwiciI6IiQyYiQxMiRHQ3c4MUJYQ0JkMFcwUldwRWtrNmtPcTJ5Sm5VMzIud2VJRnYxbWxVWlA3a083UW1HbFVxLiIsInJvbGUiOiJpbXBvcnRfdXNlciIsInUiOiIkMmIkMTIkd2NibGRVaVJLcE1haTUxZ3Vld0hHLi5VNlBPbEV0cUl2V0RkWnBkbC55SWRTcHgwaDQuREsiLCJ1c2VyIjoicDExLWFtZ2Fkc2gifQ.IWwbjrr1AVMThLErPqOzBs5Oo_9oRaLUcLKnozpzdiw"))
+				.andDo(print())
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.max_chunk").value("1"))
+				.andExpect(jsonPath("$.filename").value(testFile.getName()));
+		Chunk chunk = gson.fromJson(result.andReturn().getResponse().getContentAsString(), Chunk.class);
+		ResultActions result2 = this.mockMvc.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=2&id="+chunk.getId())
+				.content(new FileInputStream(testFile).readAllBytes())
+				.header("authorization",
+						"Bearer eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOm51bGwsImV4cCI6MTU3NDE3NzUwMiwiZ3JvdXBzIjpbInAxMS1hbWdhZHNoLWdyb3VwIiwicDExLW1lbWJlci1ncm91cCIsInAxMS1leHBvcnQtZ3JvdXAiXSwicGlkIjpudWxsLCJwcm9qIjoicDExIiwiciI6IiQyYiQxMiRHQ3c4MUJYQ0JkMFcwUldwRWtrNmtPcTJ5Sm5VMzIud2VJRnYxbWxVWlA3a083UW1HbFVxLiIsInJvbGUiOiJpbXBvcnRfdXNlciIsInUiOiIkMmIkMTIkd2NibGRVaVJLcE1haTUxZ3Vld0hHLi5VNlBPbEV0cUl2V0RkWnBkbC55SWRTcHgwaDQuREsiLCJ1c2VyIjoicDExLWFtZ2Fkc2gifQ.IWwbjrr1AVMThLErPqOzBs5Oo_9oRaLUcLKnozpzdiw"))
+				.andDo(print())
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.max_chunk").value("2"))
+				.andExpect(jsonPath("$.id").value(chunk.getId()))
+				.andExpect(jsonPath("$.filename").value(testFile.getName()));
 	}
 
 	private File createTempFile() throws IOException {
