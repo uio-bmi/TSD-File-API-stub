@@ -2,6 +2,8 @@ package no.uio.ifi.tsd;
 
 import static no.uio.ifi.tsd.controller.TSDStubController.PROJECT;
 import static no.uio.ifi.tsd.controller.TSDStubController.TSD_S_DATA_DURABLE_FILE_IMPORT;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -33,6 +35,8 @@ import lombok.extern.slf4j.Slf4j;
 import no.uio.ifi.tsd.controller.TSDStubController;
 import no.uio.ifi.tsd.enums.TokenType;
 import no.uio.ifi.tsd.model.Chunk;
+import no.uio.ifi.tsd.model.ResumableUpload;
+import no.uio.ifi.tsd.model.ResumableUploads;
 
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
@@ -49,7 +53,7 @@ public class TSDStubControllerTests {
 
 	@BeforeAll
 	public static void setup() {
-		File resumables = new File(String.format(TSD_S_DATA_DURABLE_FILE_IMPORT,PROJECT));
+		File resumables = new File(String.format(TSD_S_DATA_DURABLE_FILE_IMPORT, PROJECT));
 		if (resumables.exists()) {
 			try {
 				FileUtils.deleteDirectory(resumables);
@@ -61,13 +65,25 @@ public class TSDStubControllerTests {
 
 	@Test
 	public void givenFullRequestwhenTSDThenToken() throws Exception {
+		
+		this.mockMvc
+		.perform(post(API_PROJECT + "/auth/tsd/token").param("type", TokenType.IMPORT.name())
+				.header("authorization", "Bearer token")
+				.header("Content-Type", MediaType.APPLICATION_JSON)
+				.content("{" + "\"user_name\": \"p11-user123\"," + "\"otp\": \"113943\","
+						+ "\"password\": \"password123456\"" + "}"))
+		.andDo(print())
+		.andExpect(status().isOk())
+		.andExpect(jsonPath("$.token").exists());
+	}
+	@Test
+	public void givenFullRequestwhenNoTSDThenToken() throws Exception {
 
 		this.mockMvc
-				.perform(post(API_PROJECT + "/auth/tsd/token").param("type", TokenType.IMPORT.name())
+				.perform(post(API_PROJECT + "/auth/basic/token")
 						.header("authorization", "Bearer token")
 						.header("Content-Type", MediaType.APPLICATION_JSON)
-						.content("{" + "\"user_name\": \"p11-user123\"," + "\"otp\": \"113943\","
-								+ "\"password\": \"password123456\"" + "}"))
+						.content(String.format("{\"type\":\"%s\"}", TokenType.IMPORT.name().toLowerCase())))
 				.andDo(print())
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.token").exists());
@@ -152,6 +168,48 @@ public class TSDStubControllerTests {
 				.andDo(print())
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.message").value(TSDStubController.STREAM_PROCESSING_FAILED));
+	}
+
+	@Test
+	public void givenChunkWhenfileStreamGetResumablesThenPass() throws Exception {
+		File testFile = createTempFile();
+
+		ResultActions result = this.mockMvc
+				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=1")
+						.content(readBytes(testFile))
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.max_chunk").value("1"))
+				.andExpect(jsonPath("$.filename").value(testFile.getName()));
+		Chunk chunk = gson.fromJson(result.andReturn().getResponse().getContentAsString(), Chunk.class);
+		String id = chunk.getId();
+		result = this.mockMvc
+				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=2&id=" + id)
+						.content(readBytes(testFile))
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.max_chunk").value("2"))
+				.andExpect(jsonPath("$.id").value(id))
+				.andExpect(jsonPath("$.filename").value(testFile.getName()));
+		chunk = gson.fromJson(result.andReturn().getResponse().getContentAsString(), Chunk.class);
+
+		ResultActions resultActions = this.mockMvc
+				.perform(get(API_PROJECT + "/files/resumables/")
+						.param("project", PROJECT)
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isOk());
+		ResumableUpload resumableUpload = gson.fromJson(resultActions.andReturn().getResponse().getContentAsString(),
+				ResumableUploads.class)
+				.getResumables()
+				.stream()
+				.filter(u -> u.getId().equals(id))
+				.findAny()
+				.get();
+		assertEquals(chunk.getFileName(), resumableUpload.getFileName());
+		assertEquals(chunk.getMaxChunk(), resumableUpload.getMaxChunk().toString());
 	}
 
 	@Test
