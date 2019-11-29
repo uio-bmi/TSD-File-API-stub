@@ -1,9 +1,11 @@
 package no.uio.ifi.tsd.controller;
 
+import static java.util.function.Predicate.not;
+
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -11,19 +13,15 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.Reader;
 import java.math.BigInteger;
-import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Random;
 import java.util.stream.Collectors;
 
@@ -162,7 +160,8 @@ public class TSDStubController {
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
 			@ApiParam(value = "FileName", example = "name.ext") @PathVariable String filename,
 			@ApiParam(value = "chunk", example = "1") @RequestParam String chunk,
-			@RequestParam(value = "id", required = false) String id, @RequestBody byte[] content) throws IOException {
+			@RequestParam(value = "id", required = false) String id,
+			@RequestBody(required = false) byte[] content) throws IOException {
 		log.info("upload chunk");
 		if (StringUtils.isEmpty(authorization) || !authorization.startsWith("Bearer")) {
 			throw new UnauthorizedException();
@@ -176,16 +175,16 @@ public class TSDStubController {
 		ResumableUploads resumableChunks = readResumableChunks(project);
 
 		Chunk newChunk = createChunk(filename, chunk, id);
-		ResumableUpload resumableUpload = createReumableUpload(newChunk);
+		ResumableUpload resumableUpload;
 
 		if (chunk.equals("1")) {
 			log.info("initializing chunk");
 			File chunkFile = saveChunk(uploadFolder, filename, content);
-			resumableUpload = updateResumableUpload(resumableUpload, chunkFile);
+			resumableUpload = updateResumableUpload(createReumableUpload(newChunk), chunkFile);
 			resumableChunks.getResumables().add(resumableUpload);
 		} else if ("end".equalsIgnoreCase(chunk)) {
 			log.info("finalizing chunk");
-			finalizeChunks(uploadFolder, filename);
+			finalizeChunks(uploadFolder, id, resumableChunks);
 		} else {
 			log.info("Upload chunks");
 			resumableUpload = getResumableUpload(id, resumableChunks);
@@ -296,9 +295,23 @@ public class TSDStubController {
 		return chunkFile;
 	}
 
-	private void finalizeChunks(File uploadFolder, String id) {
-		// TODO Auto-generated method stub
+	private void finalizeChunks(File uploadFolder, String id, ResumableUploads resumableChunks) {
 
+		ResumableUpload resumable = resumableChunks.getResumables()
+				.stream()
+				.filter(r -> r.getId().equals(id))
+				.findFirst()
+				.get();
+		try {
+			mergeFiles(uploadFolder, resumable);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		resumableChunks.setResumables(resumableChunks
+				.getResumables()
+				.stream()
+				.filter(not((r -> r.getId().equals(id))))
+				.collect(Collectors.toList()));
 	}
 
 	private File saveChunk(File uploadFolder, String filename, byte[] content) {
@@ -341,7 +354,6 @@ public class TSDStubController {
 			while ((bytesCount = fis.read(byteArray)) != -1) {
 				digest.update(byteArray, 0, bytesCount);
 			}
-			;
 
 			// close the stream; We don't need it now.
 			fis.close();
@@ -362,4 +374,31 @@ public class TSDStubController {
 		// return complete hash
 		return sb.toString();
 	}
+
+	private void mergeFiles(File dir, ResumableUpload resumable) throws IOException {
+		String fileName = resumable.getFileName();
+		PrintWriter pw = new PrintWriter(new File(String.format(TSD_S_DATA_DURABLE_FILE_IMPORT, PROJECT), fileName));
+
+		for (int i = 1; i <= resumable.getMaxChunk().intValue(); i++) {
+			File chunkFile = new File(dir, String.format(fileName + ".chunk.%s", i));
+
+			log.info("Reading from " + chunkFile);
+
+			// create object of BufferedReader
+			BufferedReader br = new BufferedReader(new FileReader(chunkFile));
+			chunkFile.delete();
+			// Read from current file
+			String line = br.readLine();
+			while (line != null) {
+				// write to the output file
+				pw.print(line);
+				line = br.readLine();
+			}
+			pw.flush();
+		}
+		dir.delete();
+		System.out.println("Reading from all files" +
+				" in directory " + dir.getName() + " Completed");
+	}
+
 }

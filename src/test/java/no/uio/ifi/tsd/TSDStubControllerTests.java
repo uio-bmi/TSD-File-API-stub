@@ -16,6 +16,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Random;
 
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.junit.jupiter.api.BeforeAll;
@@ -226,12 +227,21 @@ public class TSDStubControllerTests {
 				.andExpect(jsonPath("$.filename").value(testFile.getName()));
 		Chunk chunk = gson.fromJson(result.andReturn().getResponse().getContentAsString(), Chunk.class);
 		this.mockMvc
-				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=2&id=" + chunk.getId())
-						.content(readBytes(testFile))
+		.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=2&id=" + chunk.getId())
+				.content(readBytes(testFile))
+				.header("authorization", TOKEN))
+		.andDo(print())
+		.andExpect(status().isCreated())
+		.andExpect(jsonPath("$.max_chunk").value("2"))
+		.andExpect(jsonPath("$.id").value(chunk.getId()))
+		.andExpect(jsonPath("$.filename").value(testFile.getName()));
+		this.mockMvc
+				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=end&id=" + chunk.getId())
+						//.content(readBytes(testFile))
 						.header("authorization", TOKEN))
 				.andDo(print())
 				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.max_chunk").value("2"))
+				.andExpect(jsonPath("$.max_chunk").value("end"))
 				.andExpect(jsonPath("$.id").value(chunk.getId()))
 				.andExpect(jsonPath("$.filename").value(testFile.getName()));
 	}
@@ -259,16 +269,11 @@ public class TSDStubControllerTests {
 	}
 
 	private File createTempFile() throws IOException {
-		File testFile = File.createTempFile("abcd", "fdf");
+		File testFile = File.createTempFile(new Random().nextInt()+"", "fdf");
 		FileWriter writer = new FileWriter(testFile);
 
-		while (testFile.length() <= 5) {
-			writer.write("abcdefghijkl");
-			writer.write("\n");
-			writer.write("abcdefghijkl");
-			writer.write("\n");
-			writer.write("abcdefghijkl");
-			writer.write("\n");
+		while (testFile.length() <= 1) {
+			writer.write("abcdefghijkl\n");
 		}
 		writer.flush();
 		writer.close();
