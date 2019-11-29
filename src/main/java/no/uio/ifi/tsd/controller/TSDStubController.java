@@ -64,8 +64,9 @@ import no.uio.ifi.tsd.model.User;
 @Api(value = "TSD File Api Stub")
 public class TSDStubController {
 
+	public static final String PROJECT = "p11";
 	private Gson gson = new Gson();
-	private static final String TSD_S_DATA_DURABLE_FILE_IMPORT = "./tsd/%s/data/durable/file-import/";
+	public static final String TSD_S_DATA_DURABLE_FILE_IMPORT = "./tsd/%s/data/durable/file-import/";
 	public static final String STREAM_PROCESSING_FAILED = "stream processing failed";
 	public static final String DATA_STREAMED = "data streamed";
 
@@ -74,7 +75,7 @@ public class TSDStubController {
 	@RequestMapping(value = "/auth/tsd/token", method = RequestMethod.POST, produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseBody
 	public String getToken(
-			@ApiParam(value = "project ID ", required = true, example = "p11") @PathVariable String project,
+			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@RequestParam TokenType type,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
 			@RequestBody User data) throws IOException {
@@ -83,8 +84,8 @@ public class TSDStubController {
 		String otp = data.getOtp();
 		String password = data.getPassword();
 
-		if (userName == null || userName.isEmpty() || otp == null || otp.isEmpty() || password == null
-				|| password.isEmpty() || authorization == null || authorization.isEmpty()
+		if (StringUtils.isEmpty(userName) || StringUtils.isEmpty(otp) || StringUtils.isEmpty(password) || StringUtils
+				.isEmpty(authorization)
 				|| !authorization.startsWith("Bearer")) {
 			throw new UnauthorizedException();
 		} else {
@@ -99,14 +100,13 @@ public class TSDStubController {
 	@RequestMapping(value = "/auth/basic/token", method = RequestMethod.POST, produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseBody
 	public String getToken(
-			@ApiParam(value = "project ID ", required = true, example = "p11") @PathVariable String project,
+			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
 			@RequestBody String data) throws IOException {
 		Map<String, String> tokenMap = new ObjectMapper().readValue(data, new TypeReference<Map<String, String>>() {
 		});
 		String type = tokenMap.get("type");
-		if (type == null || type.isEmpty() || authorization == null || authorization.isEmpty()
-				|| !authorization.startsWith("Bearer")) {
+		if (StringUtils.isEmpty(type) || StringUtils.isEmpty(authorization) || !authorization.startsWith("Bearer")) {
 			throw new UnauthorizedException();
 		} else {
 			return new JSONObject().put("token",
@@ -118,15 +118,15 @@ public class TSDStubController {
 	@RequestMapping(value = "/files/stream", method = RequestMethod.PUT, produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
 	@ResponseBody()
 	public ResponseEntity<?> upload(
-			@ApiParam(value = "project ID ", required = true, example = "p11") @PathVariable String project,
+			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
 			@ApiParam(value = "FileName", example = "name.ext") @RequestHeader(required = false) String filename,
 			InputStream fileStream) throws IOException {
 		log.info("upload");
 
-		if (authorization == null || authorization.isEmpty() || !authorization.startsWith("Bearer")) {
+		if (StringUtils.isEmpty(authorization) || !authorization.startsWith("Bearer")) {
 			throw new UnauthorizedException();
-		} else if (filename == null || filename.isEmpty() || filename.isBlank()) {
+		} else if (StringUtils.isEmpty(filename)) {
 			return ResponseEntity.status(HttpStatus.OK).body(createJsonMessage(STREAM_PROCESSING_FAILED));
 		}
 
@@ -144,12 +144,12 @@ public class TSDStubController {
 	@RequestMapping(value = "/files/resumables", method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseBody()
 	public ResponseEntity<?> getResumableUploads(
-			@ApiParam(value = "project ID ", required = true, example = "p11") @PathVariable String project,
+			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization)
 			throws IOException {
 		log.info("upload");
 
-		if (authorization == null || authorization.isEmpty() || !authorization.startsWith("Bearer")) {
+		if (StringUtils.isEmpty(authorization) || !authorization.startsWith("Bearer")) {
 			throw new UnauthorizedException();
 		}
 		ResumableUploads resumableChunks = readResumableChunks(project);
@@ -159,15 +159,15 @@ public class TSDStubController {
 	@RequestMapping(value = "/files/stream/{filename}", method = RequestMethod.PATCH, produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
 	@ResponseBody()
 	public ResponseEntity<?> initializeResumableUpload(
-			@ApiParam(value = "project ID ", required = true, example = "p11") @PathVariable String project,
+			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
 			@ApiParam(value = "FileName", example = "name.ext") @PathVariable String filename,
 			@ApiParam(value = "chunk", example = "1") @RequestParam String chunk,
 			@RequestParam(value = "id", required = false) String id, @RequestBody byte[] content) throws IOException {
 		log.info("upload chunk");
-		if (authorization == null || authorization.isEmpty() || !authorization.startsWith("Bearer")) {
+		if (StringUtils.isEmpty(authorization) || !authorization.startsWith("Bearer")) {
 			throw new UnauthorizedException();
-		} else if (filename == null || filename.isEmpty() || filename.isBlank()) {
+		} else if (StringUtils.isEmpty(filename)) {
 			return ResponseEntity.status(HttpStatus.OK).body(createJsonMessage(STREAM_PROCESSING_FAILED));
 		}
 		if (id == null) {
@@ -182,7 +182,7 @@ public class TSDStubController {
 		if (chunk.equals("1")) {
 			log.info("initializing chunk");
 			File chunkFile = saveChunk(uploadFolder, filename, content);
-			resumableUpload=updateResumableUpload(resumableUpload, chunkFile);
+			resumableUpload = updateResumableUpload(resumableUpload, chunkFile);
 			resumableChunks.getResumables().add(resumableUpload);
 		} else if ("end".equalsIgnoreCase(chunk)) {
 			log.info("finalizing chunk");
@@ -191,12 +191,12 @@ public class TSDStubController {
 			log.info("Upload chunks");
 			resumableUpload = getResumableUpload(id, resumableChunks);
 			BigInteger maxChunk = new BigInteger(chunk);
-			if(!maxChunk.subtract(resumableUpload.getMaxChunk()).equals(BigInteger.ONE)) {
+			if (!maxChunk.subtract(resumableUpload.getMaxChunk()).equals(BigInteger.ONE)) {
 				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(createJsonMessage("chunk_order_incorrect"));
 			}
 			resumableUpload.setMaxChunk(maxChunk);
 			File chunkFile = saveChunk(uploadFolder, chunk, resumableUpload.getFileName(), content);
-			resumableUpload=updateResumableUpload(resumableUpload, chunkFile);
+			resumableUpload = updateResumableUpload(resumableUpload, chunkFile);
 			log.info(resumableChunks.toString());
 			resumableChunks = updateResumableChunks(resumableChunks, resumableUpload, newChunk);
 			log.info(resumableChunks.toString());
@@ -218,7 +218,7 @@ public class TSDStubController {
 		if (resumableUpload.getMaxChunk().equals(BigInteger.ONE)) {
 			resumableUpload.setPreviousOffset(BigInteger.ZERO);
 			resumableUpload.setNextOffset(BigInteger.valueOf(length));
-		}else {
+		} else {
 			resumableUpload.setPreviousOffset(resumableUpload.getNextOffset());
 			resumableUpload.setNextOffset(resumableUpload.getNextOffset().add(BigInteger.valueOf(length)));
 		}
@@ -230,8 +230,10 @@ public class TSDStubController {
 	private ResumableUploads updateResumableChunks(ResumableUploads resumableChunks, ResumableUpload resumableUpload,
 			Chunk newChunk) {
 		resumableUpload.setMaxChunk(new BigInteger(newChunk.getMaxChunk()));
-		List<ResumableUpload> newItems = resumableChunks.getResumables().stream()
-				.map(o -> o.getId() == resumableUpload.getId() ? resumableUpload : o).collect(Collectors.toList());
+		List<ResumableUpload> newItems = resumableChunks.getResumables()
+				.stream()
+				.map(o -> o.getId() == resumableUpload.getId() ? resumableUpload : o)
+				.collect(Collectors.toList());
 		resumableChunks.setResumables(newItems);
 		return resumableChunks;
 	}
@@ -262,19 +264,19 @@ public class TSDStubController {
 	}
 
 	private ResumableUploads readResumableChunks(String project) {
-		ResumableUploads resumables=null;
+		ResumableUploads resumables = null;
 		File resumablesPAth = new File(getResumablesPAth(project));
 		if (resumablesPAth.exists()) {
 			log.info("read resumable");
 			try (Reader reader = new FileReader(resumablesPAth)) {
-				 resumables = gson.fromJson(reader, ResumableUploads.class);
+				resumables = gson.fromJson(reader, ResumableUploads.class);
 				log.info((resumables.toString()));
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		} else {
 			log.info("create new resumable");
-			 resumables = new ResumableUploads();
+			resumables = new ResumableUploads();
 		}
 		return resumables;
 	}

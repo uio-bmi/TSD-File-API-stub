@@ -1,5 +1,7 @@
 package no.uio.ifi.tsd;
 
+import static no.uio.ifi.tsd.controller.TSDStubController.PROJECT;
+import static no.uio.ifi.tsd.controller.TSDStubController.TSD_S_DATA_DURABLE_FILE_IMPORT;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -9,9 +11,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
 
+import org.apache.tomcat.util.http.fileupload.FileUtils;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,21 +40,37 @@ import no.uio.ifi.tsd.model.Chunk;
 @Slf4j
 public class TSDStubControllerTests {
 
+	private static final String TOKEN = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOm51bGwsImV4cCI6MTU3NDE3NzUwMiwiZ3JvdXBzIjpbInAxMS1hbWdhZHNoLWdyb3VwIiwicDExLW1lbWJlci1ncm91cCIsInAxMS1leHBvcnQtZ3JvdXAiXSwicGlkIjpudWxsLCJwcm9qIjoicDExIiwiciI6IiQyYiQxMiRHQ3c4MUJYQ0JkMFcwUldwRWtrNmtPcTJ5Sm5VMzIud2VJRnYxbWxVWlA3a083UW1HbFVxLiIsInJvbGUiOiJpbXBvcnRfdXNlciIsInUiOiIkMmIkMTIkd2NibGRVaVJLcE1haTUxZ3Vld0hHLi5VNlBPbEV0cUl2V0RkWnBkbC55SWRTcHgwaDQuREsiLCJ1c2VyIjoicDExLWFtZ2Fkc2gifQ.IWwbjrr1AVMThLErPqOzBs5Oo_9oRaLUcLKnozpzdiw";
 	private static final String API_PROJECT = "https://api.tsd.usit.no/v1/p11";
 	@Autowired
 	private MockMvc mockMvc;
 
 	private Gson gson = new Gson();
 
+	@BeforeAll
+	public static void setup() {
+		File resumables = new File(String.format(TSD_S_DATA_DURABLE_FILE_IMPORT,PROJECT));
+		if (resumables.exists()) {
+			try {
+				FileUtils.deleteDirectory(resumables);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
 	@Test
 	public void givenFullRequestwhenTSDThenToken() throws Exception {
 
 		this.mockMvc
 				.perform(post(API_PROJECT + "/auth/tsd/token").param("type", TokenType.IMPORT.name())
-						.header("authorization", "Bearer token").header("Content-Type", MediaType.APPLICATION_JSON)
+						.header("authorization", "Bearer token")
+						.header("Content-Type", MediaType.APPLICATION_JSON)
 						.content("{" + "\"user_name\": \"p11-user123\"," + "\"otp\": \"113943\","
 								+ "\"password\": \"password123456\"" + "}"))
-				.andDo(print()).andExpect(status().isOk()).andExpect(jsonPath("$.token").exists());
+				.andDo(print())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.token").exists());
 	}
 
 	@Test
@@ -57,9 +78,11 @@ public class TSDStubControllerTests {
 
 		this.mockMvc
 				.perform(post(API_PROJECT + "/auth/tsd/token").param("type", TokenType.IMPORT.name())
-						.header("authorization", "Bearer token").header("Content-Type", MediaType.APPLICATION_JSON)
+						.header("authorization", "Bearer token")
+						.header("Content-Type", MediaType.APPLICATION_JSON)
 						.content("{" + "\"user_name\": \"p11-user123\"," + "\"password\": \"password123456\"" + "}"))
-				.andDo(print()).andExpect(status().isUnauthorized())
+				.andDo(print())
+				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.message").value("Authentication failed"));
 	}
 
@@ -68,10 +91,12 @@ public class TSDStubControllerTests {
 
 		this.mockMvc
 				.perform(post(API_PROJECT + "/auth/tsd/token").param("type", TokenType.IMPORT.name())
-						.header("authorization", "").header("Content-Type", MediaType.APPLICATION_JSON)
+						.header("authorization", "")
+						.header("Content-Type", MediaType.APPLICATION_JSON)
 						.content("{" + "\"user_name\": \"p11-user123\"," + "\"otp\": \"113943\","
 								+ "\"password\": \"password123456\"" + "}"))
-				.andDo(print()).andExpect(status().isUnauthorized())
+				.andDo(print())
+				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.message").value("Authentication failed"));
 	}
 
@@ -83,7 +108,8 @@ public class TSDStubControllerTests {
 						.header("Content-Type", MediaType.APPLICATION_JSON)
 						.content("{" + "\"user_name\": \"p11-user123\"," + "\"otp\": \"113943\","
 								+ "\"password\": \"password123456\"" + "}"))
-				.andDo(print()).andExpect(status().isUnauthorized())
+				.andDo(print())
+				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.message").value("Authentication failed"));
 	}
 
@@ -91,11 +117,13 @@ public class TSDStubControllerTests {
 	public void givenFileWhenfileStreamThenTransmitted() throws Exception {
 		File testFile = createTempFile();
 
-		this.mockMvc.perform(put(API_PROJECT + "/files/stream").content(new FileInputStream(testFile).readAllBytes())
-				.header("Content-Type", MediaType.APPLICATION_OCTET_STREAM_VALUE).header("FileName", testFile.getName())
-				.header("authorization",
-						"Bearer eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOm51bGwsImV4cCI6MTU3NDE3NzUwMiwiZ3JvdXBzIjpbInAxMS1hbWdhZHNoLWdyb3VwIiwicDExLW1lbWJlci1ncm91cCIsInAxMS1leHBvcnQtZ3JvdXAiXSwicGlkIjpudWxsLCJwcm9qIjoicDExIiwiciI6IiQyYiQxMiRHQ3c4MUJYQ0JkMFcwUldwRWtrNmtPcTJ5Sm5VMzIud2VJRnYxbWxVWlA3a083UW1HbFVxLiIsInJvbGUiOiJpbXBvcnRfdXNlciIsInUiOiIkMmIkMTIkd2NibGRVaVJLcE1haTUxZ3Vld0hHLi5VNlBPbEV0cUl2V0RkWnBkbC55SWRTcHgwaDQuREsiLCJ1c2VyIjoicDExLWFtZ2Fkc2gifQ.IWwbjrr1AVMThLErPqOzBs5Oo_9oRaLUcLKnozpzdiw"))
-				.andDo(print()).andExpect(status().isCreated())
+		this.mockMvc
+				.perform(put(API_PROJECT + "/files/stream").content(readBytes(testFile))
+						.header("Content-Type", MediaType.APPLICATION_OCTET_STREAM_VALUE)
+						.header("FileName", testFile.getName())
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.message").value(TSDStubController.DATA_STREAMED));
 	}
 
@@ -104,10 +132,12 @@ public class TSDStubControllerTests {
 		File testFile = createTempFile();
 
 		this.mockMvc
-				.perform(put(API_PROJECT + "/files/stream").content(new FileInputStream(testFile).readAllBytes())
+				.perform(put(API_PROJECT + "/files/stream").content(readBytes(testFile))
 						.header("Content-Type", MediaType.APPLICATION_OCTET_STREAM_VALUE)
-						.header("FileName", testFile.getName()).header("authorization", ""))
-				.andDo(print()).andExpect(status().isUnauthorized())
+						.header("FileName", testFile.getName())
+						.header("authorization", ""))
+				.andDo(print())
+				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.message").value("Authentication failed"));
 	}
 
@@ -115,10 +145,12 @@ public class TSDStubControllerTests {
 	public void givenNoFileNameWhenfileStreamThenFailed() throws Exception {
 		File testFile = createTempFile();
 
-		this.mockMvc.perform(put(API_PROJECT + "/files/stream").content(new FileInputStream(testFile).readAllBytes())
-				.header("Content-Type", MediaType.APPLICATION_OCTET_STREAM_VALUE).header("authorization",
-						"Bearer eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOm51bGwsImV4cCI6MTU3NDE3NzUwMiwiZ3JvdXBzIjpbInAxMS1hbWdhZHNoLWdyb3VwIiwicDExLW1lbWJlci1ncm91cCIsInAxMS1leHBvcnQtZ3JvdXAiXSwicGlkIjpudWxsLCJwcm9qIjoicDExIiwiciI6IiQyYiQxMiRHQ3c4MUJYQ0JkMFcwUldwRWtrNmtPcTJ5Sm5VMzIud2VJRnYxbWxVWlA3a083UW1HbFVxLiIsInJvbGUiOiJpbXBvcnRfdXNlciIsInUiOiIkMmIkMTIkd2NibGRVaVJLcE1haTUxZ3Vld0hHLi5VNlBPbEV0cUl2V0RkWnBkbC55SWRTcHgwaDQuREsiLCJ1c2VyIjoicDExLWFtZ2Fkc2gifQ.IWwbjrr1AVMThLErPqOzBs5Oo_9oRaLUcLKnozpzdiw"))
-				.andDo(print()).andExpect(status().isOk())
+		this.mockMvc
+				.perform(put(API_PROJECT + "/files/stream").content(readBytes(testFile))
+						.header("Content-Type", MediaType.APPLICATION_OCTET_STREAM_VALUE)
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.message").value(TSDStubController.STREAM_PROCESSING_FAILED));
 	}
 
@@ -126,19 +158,19 @@ public class TSDStubControllerTests {
 	public void givenChunkWhenfileStreamChunkThenPass() throws Exception {
 		File testFile = createTempFile();
 
-		ResultActions result = this.mockMvc.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=1")
-				.content(new FileInputStream(testFile).readAllBytes())
-				.header("authorization",
-						"Bearer eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOm51bGwsImV4cCI6MTU3NDE3NzUwMiwiZ3JvdXBzIjpbInAxMS1hbWdhZHNoLWdyb3VwIiwicDExLW1lbWJlci1ncm91cCIsInAxMS1leHBvcnQtZ3JvdXAiXSwicGlkIjpudWxsLCJwcm9qIjoicDExIiwiciI6IiQyYiQxMiRHQ3c4MUJYQ0JkMFcwUldwRWtrNmtPcTJ5Sm5VMzIud2VJRnYxbWxVWlA3a083UW1HbFVxLiIsInJvbGUiOiJpbXBvcnRfdXNlciIsInUiOiIkMmIkMTIkd2NibGRVaVJLcE1haTUxZ3Vld0hHLi5VNlBPbEV0cUl2V0RkWnBkbC55SWRTcHgwaDQuREsiLCJ1c2VyIjoicDExLWFtZ2Fkc2gifQ.IWwbjrr1AVMThLErPqOzBs5Oo_9oRaLUcLKnozpzdiw"))
+		ResultActions result = this.mockMvc
+				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=1")
+						.content(readBytes(testFile))
+						.header("authorization", TOKEN))
 				.andDo(print())
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.max_chunk").value("1"))
 				.andExpect(jsonPath("$.filename").value(testFile.getName()));
 		Chunk chunk = gson.fromJson(result.andReturn().getResponse().getContentAsString(), Chunk.class);
-		ResultActions result2 = this.mockMvc.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=2&id="+chunk.getId())
-				.content(new FileInputStream(testFile).readAllBytes())
-				.header("authorization",
-						"Bearer eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOm51bGwsImV4cCI6MTU3NDE3NzUwMiwiZ3JvdXBzIjpbInAxMS1hbWdhZHNoLWdyb3VwIiwicDExLW1lbWJlci1ncm91cCIsInAxMS1leHBvcnQtZ3JvdXAiXSwicGlkIjpudWxsLCJwcm9qIjoicDExIiwiciI6IiQyYiQxMiRHQ3c4MUJYQ0JkMFcwUldwRWtrNmtPcTJ5Sm5VMzIud2VJRnYxbWxVWlA3a083UW1HbFVxLiIsInJvbGUiOiJpbXBvcnRfdXNlciIsInUiOiIkMmIkMTIkd2NibGRVaVJLcE1haTUxZ3Vld0hHLi5VNlBPbEV0cUl2V0RkWnBkbC55SWRTcHgwaDQuREsiLCJ1c2VyIjoicDExLWFtZ2Fkc2gifQ.IWwbjrr1AVMThLErPqOzBs5Oo_9oRaLUcLKnozpzdiw"))
+		this.mockMvc
+				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=2&id=" + chunk.getId())
+						.content(readBytes(testFile))
+						.header("authorization", TOKEN))
 				.andDo(print())
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.max_chunk").value("2"))
@@ -146,11 +178,33 @@ public class TSDStubControllerTests {
 				.andExpect(jsonPath("$.filename").value(testFile.getName()));
 	}
 
+	@Test
+	public void givenwrongChunkWhenfileStreamChunkThenFail() throws Exception {
+		File testFile = createTempFile();
+
+		ResultActions result = this.mockMvc
+				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=1")
+						.content(readBytes(testFile))
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.max_chunk").value("1"))
+				.andExpect(jsonPath("$.filename").value(testFile.getName()));
+		Chunk chunk = gson.fromJson(result.andReturn().getResponse().getContentAsString(), Chunk.class);
+		this.mockMvc
+				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=3&id=" + chunk.getId())
+						.content(readBytes(testFile))
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("chunk_order_incorrect"));
+	}
+
 	private File createTempFile() throws IOException {
 		File testFile = File.createTempFile("abcd", "fdf");
 		FileWriter writer = new FileWriter(testFile);
 
-		while (testFile.length() <= 1e+1) {
+		while (testFile.length() <= 5) {
 			writer.write("abcdefghijkl");
 			writer.write("\n");
 			writer.write("abcdefghijkl");
@@ -161,6 +215,10 @@ public class TSDStubControllerTests {
 		writer.flush();
 		writer.close();
 		return testFile;
+	}
+
+	private byte[] readBytes(File testFile) throws IOException, FileNotFoundException {
+		return new FileInputStream(testFile).readAllBytes();
 	}
 
 }
