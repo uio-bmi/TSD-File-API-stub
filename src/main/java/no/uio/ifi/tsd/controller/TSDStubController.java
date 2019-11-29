@@ -100,7 +100,6 @@ public class TSDStubController {
 	@RequestMapping(value = "/auth/basic/token", method = RequestMethod.POST, produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseBody
 	public String getToken(
-			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
 			@RequestBody String data) throws IOException {
 		Map<String, String> tokenMap = new ObjectMapper().readValue(data, new TypeReference<Map<String, String>>() {
