@@ -7,9 +7,9 @@ https://test.api.tsd.usit.no/v1/docs/tsd-api-integration.html#files_and_streamin
 #Running with docker 
 Build the Image
 
-`$docker build -t tsdstub .`
+`$ docker build -t tsdstub .`
 
 Run the Image 
 
-`$ docker run --rm -it tsdstub:latest`
+`$ docker run -p 8080:8080  --rm -it tsdstub:latest`
 
