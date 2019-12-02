@@ -397,8 +397,6 @@ public class TSDStubController {
 			pw.flush();
 		}
 		dir.delete();
-		System.out.println("Reading from all files" +
-				" in directory " + dir.getName() + " Completed");
 	}
 
 }

@@ -10,7 +10,7 @@
 		<relativePath /> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>no.uio.ifi</groupId>
-	<artifactId>api</artifactId>
+	<artifactId>TSD-File-API-stub</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>tsdapistub</name>
 	<description>TSD-File-API-stub</description>
