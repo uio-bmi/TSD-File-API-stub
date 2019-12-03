@@ -1,7 +1,6 @@
 package no.uio.ifi.tsd;
 
 import static no.uio.ifi.tsd.controller.TSDStubController.PROJECT;
-import static no.uio.ifi.tsd.controller.TSDStubController.TSD_S_DATA_DURABLE_FILE_IMPORT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -20,9 +19,11 @@ import java.util.Random;
 
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -49,12 +50,13 @@ public class TSDStubControllerTests {
 	private static final String API_PROJECT = "https://api.tsd.usit.no/v1/p11";
 	@Autowired
 	private MockMvc mockMvc;
-
+	@Value("${file.import}")
+	private String durableFileImport;
 	private Gson gson = new Gson();
 
-	@BeforeAll
-	public static void setup() {
-		File resumables = new File(String.format(TSD_S_DATA_DURABLE_FILE_IMPORT, PROJECT));
+	@BeforeEach
+	public void setup() {
+		File resumables = new File(String.format(durableFileImport, PROJECT));
 		if (resumables.exists()) {
 			try {
 				FileUtils.deleteDirectory(resumables);
@@ -66,17 +68,18 @@ public class TSDStubControllerTests {
 
 	@Test
 	public void givenFullRequestwhenTSDThenToken() throws Exception {
-		
+
 		this.mockMvc
-		.perform(post(API_PROJECT + "/auth/tsd/token").param("type", TokenType.IMPORT.name())
-				.header("authorization", "Bearer token")
-				.header("Content-Type", MediaType.APPLICATION_JSON)
-				.content("{" + "\"user_name\": \"p11-user123\"," + "\"otp\": \"113943\","
-						+ "\"password\": \"password123456\"" + "}"))
-		.andDo(print())
-		.andExpect(status().isOk())
-		.andExpect(jsonPath("$.token").exists());
+				.perform(post(API_PROJECT + "/auth/tsd/token").param("type", TokenType.IMPORT.name())
+						.header("authorization", "Bearer token")
+						.header("Content-Type", MediaType.APPLICATION_JSON)
+						.content("{" + "\"user_name\": \"p11-user123\"," + "\"otp\": \"113943\","
+								+ "\"password\": \"password123456\"" + "}"))
+				.andDo(print())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.token").exists());
 	}
+
 	@Test
 	public void givenFullRequestwhenNoTSDThenToken() throws Exception {
 
@@ -227,17 +230,17 @@ public class TSDStubControllerTests {
 				.andExpect(jsonPath("$.filename").value(testFile.getName()));
 		Chunk chunk = gson.fromJson(result.andReturn().getResponse().getContentAsString(), Chunk.class);
 		this.mockMvc
-		.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=2&id=" + chunk.getId())
-				.content(readBytes(testFile))
-				.header("authorization", TOKEN))
-		.andDo(print())
-		.andExpect(status().isCreated())
-		.andExpect(jsonPath("$.max_chunk").value("2"))
-		.andExpect(jsonPath("$.id").value(chunk.getId()))
-		.andExpect(jsonPath("$.filename").value(testFile.getName()));
+				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=2&id=" + chunk.getId())
+						.content(readBytes(testFile))
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.max_chunk").value("2"))
+				.andExpect(jsonPath("$.id").value(chunk.getId()))
+				.andExpect(jsonPath("$.filename").value(testFile.getName()));
 		this.mockMvc
 				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=end&id=" + chunk.getId())
-						//.content(readBytes(testFile))
+						// .content(readBytes(testFile))
 						.header("authorization", TOKEN))
 				.andDo(print())
 				.andExpect(status().isCreated())
@@ -269,7 +272,7 @@ public class TSDStubControllerTests {
 	}
 
 	private File createTempFile() throws IOException {
-		File testFile = File.createTempFile(new Random().nextInt()+"", "fdf");
+		File testFile = File.createTempFile(new Random().nextInt() + "", "fdf");
 		FileWriter writer = new FileWriter(testFile);
 
 		while (testFile.length() <= 1) {

@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -64,7 +65,8 @@ public class TSDStubController {
 
 	public static final String PROJECT = "p11";
 	private Gson gson = new Gson();
-	public static final String TSD_S_DATA_DURABLE_FILE_IMPORT = "./tsd/%s/data/durable/file-import/";
+	@Value("${file.import}")
+	public String durableFileImport;
 	public static final String STREAM_PROCESSING_FAILED = "stream processing failed";
 	public static final String DATA_STREAMED = "data streamed";
 
@@ -171,7 +173,7 @@ public class TSDStubController {
 		if (id == null) {
 			id = generateUploadID();
 		}
-		File uploadFolder = generateUploadFolder(String.format(TSD_S_DATA_DURABLE_FILE_IMPORT, project), id);
+		File uploadFolder = generateUploadFolder(String.format(durableFileImport, project), id);
 		ResumableUploads resumableChunks = readResumableChunks(project);
 
 		Chunk newChunk = createChunk(filename, chunk, id);
@@ -258,7 +260,7 @@ public class TSDStubController {
 	}
 
 	private String getResumablesPAth(String project) {
-		return String.format(TSD_S_DATA_DURABLE_FILE_IMPORT + "/resumables.json", project);
+		return String.format(durableFileImport + "/resumables.json", project);
 	}
 
 	private ResumableUploads readResumableChunks(String project) {
@@ -377,7 +379,7 @@ public class TSDStubController {
 
 	private void mergeFiles(File dir, ResumableUpload resumable) throws IOException {
 		String fileName = resumable.getFileName();
-		PrintWriter pw = new PrintWriter(new File(String.format(TSD_S_DATA_DURABLE_FILE_IMPORT, PROJECT), fileName));
+		PrintWriter pw = new PrintWriter(new File(String.format(durableFileImport, PROJECT), fileName));
 
 		for (int i = 1; i <= resumable.getMaxChunk().intValue(); i++) {
 			File chunkFile = new File(dir, String.format(fileName + ".chunk.%s", i));
