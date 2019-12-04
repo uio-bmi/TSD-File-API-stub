@@ -1,0 +1,39 @@
+version: '3.3'
+
+services:
+
+  tsd:
+    image: uiobmi/tsd-stub:latest
+    ports:
+      - 8080:8080
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        window: 120s
+    environment:
+      - CERT_PASSWORD
+    configs:
+      - source: rootCA.pem
+        target: /etc/ega/ssl/CA.cert
+      - source: server.p12
+        target: /etc/ega/ssl/server.cert
+      - source: client.pem
+        target: /etc/ega/ssl/client.cert
+      - source: client-key.pem
+        target: /etc/ega/ssl/client.key
+
+volumes:
+  db:
+  inbox:
+  vault:
+
+configs:
+  rootCA.pem:
+    external: true
+  server.p12:
+    external: true
+  client.pem:
+    external: true
+  client-key.pem:
+    external: true
