@@ -1,0 +1,5 @@
+{"properties": [{
+  "name": "tsd.file.import",
+  "type": "java.lang.String",
+  "description": "location for storing files and chunks uploaded to tsd api should have %s for the project name variablex"
+}]}
