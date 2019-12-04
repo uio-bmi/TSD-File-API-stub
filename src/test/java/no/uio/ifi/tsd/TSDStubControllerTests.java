@@ -50,7 +50,7 @@ public class TSDStubControllerTests {
 	private static final String API_PROJECT = "https://api.tsd.usit.no/v1/p11";
 	@Autowired
 	private MockMvc mockMvc;
-	@Value("${file.import}")
+	@Value("${tsd.file.import}")
 	private String durableFileImport;
 	private Gson gson = new Gson();
 

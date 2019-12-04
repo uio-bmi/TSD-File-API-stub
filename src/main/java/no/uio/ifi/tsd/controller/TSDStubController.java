@@ -65,7 +65,7 @@ public class TSDStubController {
 
 	public static final String PROJECT = "p11";
 	private Gson gson = new Gson();
-	@Value("${file.import}")
+	@Value("${tsd.file.import}")
 	public String durableFileImport;
 	public static final String STREAM_PROCESSING_FAILED = "stream processing failed";
 	public static final String DATA_STREAMED = "data streamed";

@@ -1,0 +1,7 @@
+logging.level:
+  web: DEBUG
+  org.springframework.web: DEBUG
+          
+management.endpoints.web.exposure.include: "*"
+logging.pattern.console: "%clr(%d{yy-MM-dd E HH:mm:ss.SSS}){blue} %clr(%-5p) %clr(${PID}){faint} %clr(---){faint} %clr([%8.15t]){cyan} %-70clr(%logger{0}.%M.%L){blue} %clr(:){red} %clr(%m){faint}%n"
+tsd.file.import: ${DURABLE_FILE_IMPORT:./tsd/%s/data/durable/file-import/}
