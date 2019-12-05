@@ -6,9 +6,6 @@ import static org.springframework.security.oauth2.core.OAuth2AccessToken.TokenTy
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
@@ -18,12 +15,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.stream.Collectors;
 
+import org.apache.commons.io.IOUtils;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -205,7 +205,7 @@ public class TSDStubController {
 		}
 
 		log.info("write Resumable");
-		try (FileWriter writer = new FileWriter(getResumablesPath(project))) {
+		try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(getResumablesPath(project)))) {
 			log.info(resumableChunks.toString());
 			gson.toJson(resumableChunks, writer);
 		} catch (IOException e) {
@@ -225,7 +225,8 @@ public class TSDStubController {
 			resumableUpload.setNextOffset(resumableUpload.getNextOffset().add(BigInteger.valueOf(length)));
 		}
 		resumableUpload.setChunkSize(BigInteger.valueOf(length));
-		resumableUpload.setMd5Sum(DigestUtils.md5DigestAsHex((new FileInputStream(chunkFile))));
+		resumableUpload.setMd5Sum(DigestUtils.md5DigestAsHex(Files.newInputStream(Paths.get(chunkFile
+				.getAbsolutePath()))));
 		return resumableUpload;
 	}
 
@@ -274,7 +275,7 @@ public class TSDStubController {
 		File resumablesPAth = new File(getResumablesPath(project));
 		if (resumablesPAth.exists()) {
 			log.info("read resumable");
-			try (Reader reader = new FileReader(resumablesPAth)) {
+			try (Reader reader = Files.newBufferedReader(Paths.get(resumablesPAth.getAbsolutePath()))) {
 				resumables.setResumables(gson.fromJson(reader, ResumableUploads.class).getResumables());
 				log.info((resumables.toString()));
 			} catch (IOException e) {
@@ -286,10 +287,8 @@ public class TSDStubController {
 
 	private File saveChunk(File uploadFolder, String chunk, String filename, byte[] content) {
 		File chunkFile = new File(uploadFolder, String.format(filename.concat(".chunk.%s"), chunk));
-		try (FileWriter f = new FileWriter(chunkFile, true);
-				BufferedWriter b = new BufferedWriter(f);
-				PrintWriter p = new PrintWriter(b);) {
-
+		try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(chunkFile.getAbsolutePath()));
+				PrintWriter p = new PrintWriter(writer);) {
 			p.println(content);
 
 		} catch (IOException i) {
@@ -339,26 +338,26 @@ public class TSDStubController {
 
 	private void mergeFiles(File dir, ResumableUpload resumable) throws IOException {
 		String fileName = resumable.getFileName();
-		try (PrintWriter pw = new PrintWriter(new File(String.format(durableFileImport, PROJECT), fileName))) {
-
-			for (int i = 1; i <= resumable.getMaxChunk().intValue(); i++) {
-				File chunkFile = new File(dir, String.format(fileName.concat(".chunk.%s"), i));
-
-				log.info("Reading from " + chunkFile);
-				try (
-						BufferedReader br = new BufferedReader(new FileReader(chunkFile))) {
-					Files.delete(chunkFile.toPath());
-					// Read from current file
-					String line = br.readLine();
-					while (line != null) {
-						// write to the output file
-						pw.print(line);
-						line = br.readLine();
-					}
-				}
-			}
+		List<File> chunkFiles = new ArrayList<>();
+		File uploadedFile = new File(String.format(durableFileImport, PROJECT), fileName);
+		for (int i = 1; i <= resumable.getMaxChunk().intValue(); i++) {
+			File chunkFile = new File(dir, String.format(fileName.concat(".chunk.%s"), i));
+			chunkFiles.add(chunkFile);
+			log.info("Reading from " + chunkFile);
 		}
+		joinFiles(uploadedFile, chunkFiles);
 		Files.delete(dir.toPath());
 	}
 
+	private void joinFiles(File destination, List<File> sources) throws IOException {
+		try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(destination.getAbsolutePath()),
+				StandardOpenOption.APPEND);) {
+			for (File source : sources) {
+				try (BufferedReader reader = Files.newBufferedReader(Paths.get(source.getAbsolutePath()));) {
+					IOUtils.copy(reader, writer);
+				}
+				Files.delete(source.toPath());
+			}
+		}
+	}
 }
