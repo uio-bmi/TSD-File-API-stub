@@ -4,12 +4,5 @@
 ## Stub for TSD File API 
 TSD file API documentation can be found at https://test.api.tsd.usit.no/v1/docs/tsd-api-integration.html#files_and_streaming
 
-## Running with docker 
-### Build the Image
-`$ docker build -t tsdstub .`
-
-### Run the Image 
-`$ docker run -p 8080:8080  --rm -it tsdstub:latest`
-
 ## Swagger API
 https://localhost:8080/swagger-ui.html....

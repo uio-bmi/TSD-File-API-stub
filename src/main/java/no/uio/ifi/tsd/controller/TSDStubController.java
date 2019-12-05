@@ -203,7 +203,7 @@ public class TSDStubController {
 		}
 
 		log.info("write Resumable");
-		try (FileWriter writer = new FileWriter(getResumablesPAth(project))) {
+		try (FileWriter writer = new FileWriter(getResumablesPath(project))) {
 			log.info(resumableChunks.toString());
 			gson.toJson(resumableChunks, writer);
 		} catch (IOException e) {
@@ -259,13 +259,13 @@ public class TSDStubController {
 		return resumableChunks.getResumables().stream().filter(u -> u.getId().equals(id)).findAny().get();
 	}
 
-	private String getResumablesPAth(String project) {
+	private String getResumablesPath(String project) {
 		return String.format(durableFileImport + "/resumables.json", project);
 	}
 
 	private ResumableUploads readResumableChunks(String project) {
 		ResumableUploads resumables = null;
-		File resumablesPAth = new File(getResumablesPAth(project));
+		File resumablesPAth = new File(getResumablesPath(project));
 		if (resumablesPAth.exists()) {
 			log.info("read resumable");
 			try (Reader reader = new FileReader(resumablesPAth)) {
