@@ -8,5 +8,5 @@ tsd.file.import: ${DURABLE_FILE_IMPORT:/tsd/%s/data/durable/file-import/}
 
 server.ssl:
   key-store-type: PKCS12
-  key-store: ${KEYSTORE_PATH:file:/etc/ega/ssl/server.cert}
+  key-store: file:${KEYSTORE_PATH:/etc/ega/ssl/server.cert}
   key-store-password: ${CERT_PASSWORD}
