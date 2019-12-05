@@ -22,11 +22,8 @@ services:
         target: /etc/ega/ssl/client.cert
       - source: client-key.pem
         target: /etc/ega/ssl/client.key
-
-volumes:
-  db:
-  inbox:
-  vault:
+    volumes:
+    - ./tsd:/tsd/p11/data/durable/file-import/
 
 configs:
   rootCA.pem:
