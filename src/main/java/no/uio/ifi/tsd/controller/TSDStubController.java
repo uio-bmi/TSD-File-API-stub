@@ -1,13 +1,11 @@
 package no.uio.ifi.tsd.controller;
 
 import static java.util.function.Predicate.not;
+import static org.springframework.security.oauth2.core.OAuth2AccessToken.TokenType.BEARER;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
@@ -17,26 +15,30 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.stream.Collectors;
 
-import org.json.JSONException;
+import org.apache.commons.io.IOUtils;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.DigestUtils;
 import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -72,21 +74,20 @@ public class TSDStubController {
 
 	@ApiResponses(value = { @ApiResponse(code = 200, message = "token retrieved succesfully"),
 			@ApiResponse(code = 401, message = "You are not authorized to get token"), })
-	@RequestMapping(value = "/auth/tsd/token", method = RequestMethod.POST, produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+	@PostMapping(value = "/auth/tsd/token", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseBody
 	public String getToken(
 			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@RequestParam TokenType type,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
-			@RequestBody User data) throws IOException {
+			@RequestBody User data) {
 
 		String userName = data.getUser_name();
 		String otp = data.getOtp();
 		String password = data.getPassword();
 
 		if (StringUtils.isEmpty(userName) || StringUtils.isEmpty(otp) || StringUtils.isEmpty(password) || StringUtils
-				.isEmpty(authorization)
-				|| !authorization.startsWith("Bearer")) {
+				.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
 			throw new UnauthorizedException();
 		} else {
 			return new JSONObject().put("token",
@@ -97,7 +98,7 @@ public class TSDStubController {
 
 	@ApiResponses(value = { @ApiResponse(code = 200, message = "token retrieved succesfully"),
 			@ApiResponse(code = 401, message = "You are not authorized to get token"), })
-	@RequestMapping(value = "/auth/basic/token", method = RequestMethod.POST, produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+	@PostMapping(value = "/auth/basic/token", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseBody
 	public String getToken(
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
@@ -105,7 +106,8 @@ public class TSDStubController {
 		Map<String, String> tokenMap = new ObjectMapper().readValue(data, new TypeReference<Map<String, String>>() {
 		});
 		String type = tokenMap.get("type");
-		if (StringUtils.isEmpty(type) || StringUtils.isEmpty(authorization) || !authorization.startsWith("Bearer")) {
+		if (StringUtils.isEmpty(type) || StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER
+				.getValue())) {
 			throw new UnauthorizedException();
 		} else {
 			return new JSONObject().put("token",
@@ -114,16 +116,16 @@ public class TSDStubController {
 		}
 	}
 
-	@RequestMapping(value = "/files/stream", method = RequestMethod.PUT, produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+	@PutMapping(value = "/files/stream", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
 	@ResponseBody()
-	public ResponseEntity<?> upload(
+	public ResponseEntity<String> upload(
 			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
 			@ApiParam(value = "FileName", example = "name.ext") @RequestHeader(required = false) String filename,
 			InputStream fileStream) throws IOException {
 		log.info("upload");
 
-		if (StringUtils.isEmpty(authorization) || !authorization.startsWith("Bearer")) {
+		if (StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
 			throw new UnauthorizedException();
 		} else if (StringUtils.isEmpty(filename)) {
 			return ResponseEntity.status(HttpStatus.OK).body(createJsonMessage(STREAM_PROCESSING_FAILED));
@@ -140,24 +142,24 @@ public class TSDStubController {
 		return ResponseEntity.status(HttpStatus.CREATED).body(createJsonMessage(DATA_STREAMED));
 	}
 
-	@RequestMapping(value = "/files/resumables", method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE)
+	@GetMapping(value = "/files/resumables", produces = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseBody()
-	public ResponseEntity<?> getResumableUploads(
+	public ResponseEntity<String> getResumableUploads(
 			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization)
 			throws IOException {
 		log.info("upload");
 
-		if (StringUtils.isEmpty(authorization) || !authorization.startsWith("Bearer")) {
+		if (StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
 			throw new UnauthorizedException();
 		}
 		ResumableUploads resumableChunks = readResumableChunks(project);
 		return ResponseEntity.status(HttpStatus.OK).body(gson.toJson(resumableChunks));
 	}
 
-	@RequestMapping(value = "/files/stream/{filename}", method = RequestMethod.PATCH, produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+	@PatchMapping(value = "/files/stream/{filename}", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
 	@ResponseBody()
-	public ResponseEntity<?> initializeResumableUpload(
+	public ResponseEntity<String> initializeResumableUpload(
 			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
 			@ApiParam(value = "FileName", example = "name.ext") @PathVariable String filename,
@@ -165,7 +167,7 @@ public class TSDStubController {
 			@RequestParam(value = "id", required = false) String id,
 			@RequestBody(required = false) byte[] content) throws IOException {
 		log.info("upload chunk");
-		if (StringUtils.isEmpty(authorization) || !authorization.startsWith("Bearer")) {
+		if (StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
 			throw new UnauthorizedException();
 		} else if (StringUtils.isEmpty(filename)) {
 			return ResponseEntity.status(HttpStatus.OK).body(createJsonMessage(STREAM_PROCESSING_FAILED));
@@ -196,18 +198,18 @@ public class TSDStubController {
 			}
 			resumableUpload.setMaxChunk(maxChunk);
 			File chunkFile = saveChunk(uploadFolder, chunk, resumableUpload.getFileName(), content);
-			resumableUpload = updateResumableUpload(resumableUpload, chunkFile);
+			updateResumableUpload(resumableUpload, chunkFile);
 			log.info(resumableChunks.toString());
-			resumableChunks = updateResumableChunks(resumableChunks, resumableUpload, newChunk);
+			updateResumableChunks(resumableChunks, resumableUpload, newChunk);
 			log.info(resumableChunks.toString());
 		}
 
 		log.info("write Resumable");
-		try (FileWriter writer = new FileWriter(getResumablesPath(project))) {
+		try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(getResumablesPath(project)))) {
 			log.info(resumableChunks.toString());
 			gson.toJson(resumableChunks, writer);
 		} catch (IOException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		}
 		log.info(gson.toJson(newChunk));
 		return ResponseEntity.status(HttpStatus.CREATED).body(gson.toJson(newChunk));
@@ -223,7 +225,8 @@ public class TSDStubController {
 			resumableUpload.setNextOffset(resumableUpload.getNextOffset().add(BigInteger.valueOf(length)));
 		}
 		resumableUpload.setChunkSize(BigInteger.valueOf(length));
-		resumableUpload.setMd5Sum(getFileChecksum(chunkFile));
+		resumableUpload.setMd5Sum(DigestUtils.md5DigestAsHex(Files.newInputStream(Paths.get(chunkFile
+				.getAbsolutePath()))));
 		return resumableUpload;
 	}
 
@@ -232,7 +235,7 @@ public class TSDStubController {
 		resumableUpload.setMaxChunk(new BigInteger(newChunk.getMaxChunk()));
 		List<ResumableUpload> newItems = resumableChunks.getResumables()
 				.stream()
-				.map(o -> o.getId() == resumableUpload.getId() ? resumableUpload : o)
+				.map(o -> o.getId().equals(resumableUpload.getId()) ? resumableUpload : o)
 				.collect(Collectors.toList());
 		resumableChunks.setResumables(newItems);
 		return resumableChunks;
@@ -256,42 +259,40 @@ public class TSDStubController {
 	}
 
 	private ResumableUpload getResumableUpload(String id, ResumableUploads resumableChunks) {
-		return resumableChunks.getResumables().stream().filter(u -> u.getId().equals(id)).findAny().get();
+		return resumableChunks.getResumables()
+				.stream()
+				.filter(u -> u.getId().equals(id))
+				.findAny()
+				.get();
 	}
 
 	private String getResumablesPath(String project) {
-		return String.format(durableFileImport + "/resumables.json", project);
+		return String.format(durableFileImport.concat("/resumables.json"), project);
 	}
 
 	private ResumableUploads readResumableChunks(String project) {
-		ResumableUploads resumables = null;
+		ResumableUploads resumables = new ResumableUploads();
 		File resumablesPAth = new File(getResumablesPath(project));
 		if (resumablesPAth.exists()) {
 			log.info("read resumable");
-			try (Reader reader = new FileReader(resumablesPAth)) {
-				resumables = gson.fromJson(reader, ResumableUploads.class);
+			try (Reader reader = Files.newBufferedReader(Paths.get(resumablesPAth.getAbsolutePath()))) {
+				resumables.setResumables(gson.fromJson(reader, ResumableUploads.class).getResumables());
 				log.info((resumables.toString()));
 			} catch (IOException e) {
-				e.printStackTrace();
+				log.error(e.getMessage());
 			}
-		} else {
-			log.info("create new resumable");
-			resumables = new ResumableUploads();
 		}
 		return resumables;
 	}
 
 	private File saveChunk(File uploadFolder, String chunk, String filename, byte[] content) {
-		File chunkFile = new File(uploadFolder, String.format(filename + ".chunk.%s", chunk));
-
-		try (FileWriter f = new FileWriter(chunkFile, true);
-				BufferedWriter b = new BufferedWriter(f);
-				PrintWriter p = new PrintWriter(b);) {
-
+		File chunkFile = new File(uploadFolder, String.format(filename.concat(".chunk.%s"), chunk));
+		try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(chunkFile.getAbsolutePath()));
+				PrintWriter p = new PrintWriter(writer);) {
 			p.println(content);
 
 		} catch (IOException i) {
-			i.printStackTrace();
+			log.error(i.getMessage());
 		}
 		log.info(chunkFile.getAbsolutePath());
 		return chunkFile;
@@ -299,15 +300,11 @@ public class TSDStubController {
 
 	private void finalizeChunks(File uploadFolder, String id, ResumableUploads resumableChunks) {
 
-		ResumableUpload resumable = resumableChunks.getResumables()
-				.stream()
-				.filter(r -> r.getId().equals(id))
-				.findFirst()
-				.get();
+		ResumableUpload resumable = getResumableUpload(id, resumableChunks);
 		try {
 			mergeFiles(uploadFolder, resumable);
 		} catch (IOException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		}
 		resumableChunks.setResumables(resumableChunks
 				.getResumables()
@@ -335,70 +332,32 @@ public class TSDStubController {
 		return String.valueOf(new Random(new Date().getTime()).hashCode());
 	}
 
-	private String createJsonMessage(String message) throws JSONException {
+	private String createJsonMessage(String message) {
 		return new JSONObject().put("message", message).toString();
-	}
-
-	private static String getFileChecksum(File file) throws IOException {
-		MessageDigest digest;
-		StringBuilder sb = new StringBuilder();
-		try {
-			digest = MessageDigest.getInstance("MD5");
-
-			// Get file input stream for reading the file content
-			FileInputStream fis = new FileInputStream(file);
-
-			// Create byte array to read data in chunks
-			byte[] byteArray = new byte[1024];
-			int bytesCount = 0;
-
-			// Read file data and update in message digest
-			while ((bytesCount = fis.read(byteArray)) != -1) {
-				digest.update(byteArray, 0, bytesCount);
-			}
-
-			// close the stream; We don't need it now.
-			fis.close();
-
-			// Get the hash's bytes
-			byte[] bytes = digest.digest();
-
-			// This bytes[] has bytes in decimal format;
-			// Convert it to hexadecimal format
-			for (int i = 0; i < bytes.length; i++) {
-				sb.append(Integer.toString((bytes[i] & 0xff) + 0x100, 16).substring(1));
-			}
-		} catch (NoSuchAlgorithmException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-
-		// return complete hash
-		return sb.toString();
 	}
 
 	private void mergeFiles(File dir, ResumableUpload resumable) throws IOException {
 		String fileName = resumable.getFileName();
-		PrintWriter pw = new PrintWriter(new File(String.format(durableFileImport, PROJECT), fileName));
-
+		List<File> chunkFiles = new ArrayList<>();
+		File uploadedFile = new File(String.format(durableFileImport, PROJECT), fileName);
 		for (int i = 1; i <= resumable.getMaxChunk().intValue(); i++) {
-			File chunkFile = new File(dir, String.format(fileName + ".chunk.%s", i));
-
+			File chunkFile = new File(dir, String.format(fileName.concat(".chunk.%s"), i));
+			chunkFiles.add(chunkFile);
 			log.info("Reading from " + chunkFile);
-
-			// create object of BufferedReader
-			BufferedReader br = new BufferedReader(new FileReader(chunkFile));
-			chunkFile.delete();
-			// Read from current file
-			String line = br.readLine();
-			while (line != null) {
-				// write to the output file
-				pw.print(line);
-				line = br.readLine();
-			}
-			pw.flush();
 		}
-		dir.delete();
+		joinFiles(uploadedFile, chunkFiles);
+		Files.delete(dir.toPath());
 	}
 
+	private void joinFiles(File destination, List<File> sources) throws IOException {
+		try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(destination.getAbsolutePath()),
+				StandardOpenOption.APPEND);) {
+			for (File source : sources) {
+				try (BufferedReader reader = Files.newBufferedReader(Paths.get(source.getAbsolutePath()));) {
+					IOUtils.copy(reader, writer);
+				}
+				Files.delete(source.toPath());
+			}
+		}
+	}
 }
