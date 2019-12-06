@@ -1,6 +1,5 @@
 package no.uio.ifi.tsd.controller;
 
-import static java.util.function.Predicate.not;
 import static org.springframework.security.oauth2.core.OAuth2AccessToken.TokenType.BEARER;
 
 import java.io.BufferedReader;
@@ -9,7 +8,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
-import java.io.Reader;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,14 +15,13 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.IOUtils;
 import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -56,6 +53,7 @@ import no.uio.ifi.tsd.enums.TokenType;
 import no.uio.ifi.tsd.exception.UnauthorizedException;
 import no.uio.ifi.tsd.model.Chunk;
 import no.uio.ifi.tsd.model.ResumableUpload;
+import no.uio.ifi.tsd.model.ResumableUploadRepository;
 import no.uio.ifi.tsd.model.ResumableUploads;
 import no.uio.ifi.tsd.model.User;
 
@@ -65,12 +63,16 @@ import no.uio.ifi.tsd.model.User;
 @Api(value = "TSD File Api Stub")
 public class TSDStubController {
 
+	private static final String CHUNK_ORDER_INCORRECT = "chunk_order_incorrect";
 	public static final String PROJECT = "p11";
 	private Gson gson = new Gson();
 	@Value("${tsd.file.import}")
 	public String durableFileImport;
 	public static final String STREAM_PROCESSING_FAILED = "stream processing failed";
 	public static final String DATA_STREAMED = "data streamed";
+
+	@Autowired
+	ResumableUploadRepository repository;
 
 	@ApiResponses(value = { @ApiResponse(code = 200, message = "token retrieved succesfully"),
 			@ApiResponse(code = 401, message = "You are not authorized to get token"), })
@@ -159,7 +161,7 @@ public class TSDStubController {
 
 	@PatchMapping(value = "/files/stream/{filename}", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
 	@ResponseBody()
-	public ResponseEntity<String> initializeResumableUpload(
+	public ResponseEntity<String> handleResumableUpload(
 			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
 			@ApiParam(value = "FileName", example = "name.ext") @PathVariable String filename,
@@ -173,7 +175,7 @@ public class TSDStubController {
 			return ResponseEntity.status(HttpStatus.OK).body(createJsonMessage(STREAM_PROCESSING_FAILED));
 		}
 		if (id == null) {
-			id = generateUploadID();
+			id = repository.save(new ResumableUpload()).getId();
 		}
 		File uploadFolder = generateUploadFolder(String.format(durableFileImport, project), id);
 		ResumableUploads resumableChunks = readResumableChunks(project);
@@ -188,29 +190,21 @@ public class TSDStubController {
 			resumableChunks.getResumables().add(resumableUpload);
 		} else if ("end".equalsIgnoreCase(chunk)) {
 			log.info("finalizing chunk");
-			finalizeChunks(uploadFolder, id, resumableChunks);
+			finalizeChunks(uploadFolder, id, resumableChunks, project);
 		} else {
 			log.info("Upload chunks");
-			resumableUpload = getResumableUpload(id, resumableChunks);
+			resumableUpload = getResumableUpload(id);
 			BigInteger maxChunk = new BigInteger(chunk);
 			if (!maxChunk.subtract(resumableUpload.getMaxChunk()).equals(BigInteger.ONE)) {
-				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(createJsonMessage("chunk_order_incorrect"));
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(createJsonMessage(CHUNK_ORDER_INCORRECT));
 			}
 			resumableUpload.setMaxChunk(maxChunk);
 			File chunkFile = saveChunk(uploadFolder, chunk, resumableUpload.getFileName(), content);
 			updateResumableUpload(resumableUpload, chunkFile);
-			log.info(resumableChunks.toString());
 			updateResumableChunks(resumableChunks, resumableUpload, newChunk);
 			log.info(resumableChunks.toString());
 		}
 
-		log.info("write Resumable");
-		try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(getResumablesPath(project)))) {
-			log.info(resumableChunks.toString());
-			gson.toJson(resumableChunks, writer);
-		} catch (IOException e) {
-			log.error(e.getMessage());
-		}
 		log.info(gson.toJson(newChunk));
 		return ResponseEntity.status(HttpStatus.CREATED).body(gson.toJson(newChunk));
 	}
@@ -227,6 +221,7 @@ public class TSDStubController {
 		resumableUpload.setChunkSize(BigInteger.valueOf(length));
 		resumableUpload.setMd5Sum(DigestUtils.md5DigestAsHex(Files.newInputStream(Paths.get(chunkFile
 				.getAbsolutePath()))));
+		repository.save(resumableUpload);
 		return resumableUpload;
 	}
 
@@ -258,63 +253,48 @@ public class TSDStubController {
 		return resumableUpload;
 	}
 
-	private ResumableUpload getResumableUpload(String id, ResumableUploads resumableChunks) {
-		return resumableChunks.getResumables()
-				.stream()
-				.filter(u -> u.getId().equals(id))
-				.findAny()
-				.get();
-	}
-
-	private String getResumablesPath(String project) {
-		return String.format(durableFileImport.concat("/resumables.json"), project);
+	private ResumableUpload getResumableUpload(String id) {
+		ResumableUpload byId = repository.findById(id).get();
+		return byId;
 	}
 
 	private ResumableUploads readResumableChunks(String project) {
 		ResumableUploads resumables = new ResumableUploads();
-		File resumablesPAth = new File(getResumablesPath(project));
-		if (resumablesPAth.exists()) {
-			log.info("read resumable");
-			try (Reader reader = Files.newBufferedReader(Paths.get(resumablesPAth.getAbsolutePath()))) {
-				resumables.setResumables(gson.fromJson(reader, ResumableUploads.class).getResumables());
-				log.info((resumables.toString()));
-			} catch (IOException e) {
-				log.error(e.getMessage());
-			}
-		}
+		resumables.setResumables((List<ResumableUpload>) repository.findAll());
 		return resumables;
 	}
 
-	private File saveChunk(File uploadFolder, String chunk, String filename, byte[] content) {
+	private File saveChunk(File uploadFolder, String chunk, String filename, byte[] content) throws IOException {
 		File chunkFile = new File(uploadFolder, String.format(filename.concat(".chunk.%s"), chunk));
+		log.info("Saving chunk " + chunkFile.getName() + " to " + uploadFolder.getCanonicalPath());
 		try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(chunkFile.getAbsolutePath()));
 				PrintWriter p = new PrintWriter(writer);) {
 			p.println(content);
 
 		} catch (IOException i) {
 			log.error(i.getMessage());
+			throw i;
 		}
 		log.info(chunkFile.getAbsolutePath());
 		return chunkFile;
 	}
 
-	private void finalizeChunks(File uploadFolder, String id, ResumableUploads resumableChunks) {
-
-		ResumableUpload resumable = getResumableUpload(id, resumableChunks);
-		try {
-			mergeFiles(uploadFolder, resumable);
-		} catch (IOException e) {
-			log.error(e.getMessage());
-		}
-		resumableChunks.setResumables(resumableChunks
-				.getResumables()
-				.stream()
-				.filter(not((r -> r.getId().equals(id))))
-				.collect(Collectors.toList()));
+	private File saveChunk(File uploadFolder, String filename, byte[] content) throws IOException {
+		return saveChunk(uploadFolder, "1", filename, content);
 	}
 
-	private File saveChunk(File uploadFolder, String filename, byte[] content) {
-		return saveChunk(uploadFolder, "1", filename, content);
+	private void finalizeChunks(File uploadFolder, String id, ResumableUploads resumableChunks, String project)
+			throws IOException {
+
+		ResumableUpload resumable = getResumableUpload(id);
+		try {
+			mergeFiles(uploadFolder, resumable, project);
+		} catch (IOException e) {
+			log.error(e.getMessage());
+			throw e;
+		}
+		repository.deleteById(id);
+		resumableChunks.setResumables((List<ResumableUpload>) repository.findAll());
 	}
 
 	private File generateUploadFolder(String path, String uploadId) {
@@ -324,22 +304,16 @@ public class TSDStubController {
 			if (uploadDir.mkdirs()) {
 				log.info(uploadDir + " created");
 			}
+		} else {
+			log.info(uploadDir + " already exist");
 		}
 		return uploadDir;
 	}
 
-	private String generateUploadID() {
-		return String.valueOf(new Random(new Date().getTime()).hashCode());
-	}
-
-	private String createJsonMessage(String message) {
-		return new JSONObject().put("message", message).toString();
-	}
-
-	private void mergeFiles(File dir, ResumableUpload resumable) throws IOException {
+	private void mergeFiles(File dir, ResumableUpload resumable, String project) throws IOException {
 		String fileName = resumable.getFileName();
 		List<File> chunkFiles = new ArrayList<>();
-		File uploadedFile = new File(String.format(durableFileImport, PROJECT), fileName);
+		File uploadedFile = new File(String.format(durableFileImport, project), fileName);
 		for (int i = 1; i <= resumable.getMaxChunk().intValue(); i++) {
 			File chunkFile = new File(dir, String.format(fileName.concat(".chunk.%s"), i));
 			chunkFiles.add(chunkFile);
@@ -351,13 +325,20 @@ public class TSDStubController {
 
 	private void joinFiles(File destination, List<File> sources) throws IOException {
 		try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(destination.getAbsolutePath()),
-				StandardOpenOption.APPEND);) {
+				StandardOpenOption.CREATE, StandardOpenOption.APPEND);) {
 			for (File source : sources) {
 				try (BufferedReader reader = Files.newBufferedReader(Paths.get(source.getAbsolutePath()));) {
 					IOUtils.copy(reader, writer);
 				}
 				Files.delete(source.toPath());
 			}
+		} catch (Exception e) {
+			log.error(e.getMessage());
+			throw e;
 		}
+	}
+
+	private String createJsonMessage(String message) {
+		return new JSONObject().put("message", message).toString();
 	}
 }
