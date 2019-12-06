@@ -7,7 +7,6 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintWriter;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,7 +14,6 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -108,7 +106,7 @@ public class TSDStubController {
 	public String getToken(
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
 			@RequestBody String data) throws IOException {
-		Map<String, String> tokenMap = new ObjectMapper().readValue(data, new TypeReference<Map<String, String>>() {
+		Map<String, String> tokenMap = new ObjectMapper().readValue(data, new TypeReference<>() {
 		});
 		String type = tokenMap.get("type");
 		if (StringUtils.isEmpty(type) || StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER
@@ -268,14 +266,7 @@ public class TSDStubController {
 	private File saveChunk(File uploadFolder, String chunk, String filename, byte[] content) throws IOException {
 		File chunkFile = new File(uploadFolder, String.format(filename.concat(".chunk.%s"), chunk));
 		log.info("Saving chunk " + chunkFile.getName() + " to " + uploadFolder.getCanonicalPath());
-		try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(chunkFile.getAbsolutePath()));
-				PrintWriter p = new PrintWriter(writer);) {
-			p.println(Arrays.toString(content));
-
-		} catch (IOException i) {
-			log.error(i.getMessage());
-			throw i;
-		}
+		Files.write(chunkFile.toPath(), content);
 		log.info(chunkFile.getAbsolutePath());
 		return chunkFile;
 	}
