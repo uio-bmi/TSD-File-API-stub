@@ -1,6 +1,5 @@
 package no.uio.ifi.tsd;
 
-import static no.uio.ifi.tsd.controller.TSDStubController.PROJECT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -47,7 +46,8 @@ import no.uio.ifi.tsd.model.ResumableUploads;
 public class TSDStubControllerTests {
 
 	private static final String TOKEN = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOm51bGwsImV4cCI6MTU3NDE3NzUwMiwiZ3JvdXBzIjpbInAxMS1hbWdhZHNoLWdyb3VwIiwicDExLW1lbWJlci1ncm91cCIsInAxMS1leHBvcnQtZ3JvdXAiXSwicGlkIjpudWxsLCJwcm9qIjoicDExIiwiciI6IiQyYiQxMiRHQ3c4MUJYQ0JkMFcwUldwRWtrNmtPcTJ5Sm5VMzIud2VJRnYxbWxVWlA3a083UW1HbFVxLiIsInJvbGUiOiJpbXBvcnRfdXNlciIsInUiOiIkMmIkMTIkd2NibGRVaVJLcE1haTUxZ3Vld0hHLi5VNlBPbEV0cUl2V0RkWnBkbC55SWRTcHgwaDQuREsiLCJ1c2VyIjoicDExLWFtZ2Fkc2gifQ.IWwbjrr1AVMThLErPqOzBs5Oo_9oRaLUcLKnozpzdiw";
-	private static final String API_PROJECT = "https://api.tsd.usit.no/v1/p11";
+	private static final String PROJECT = "p13";
+	private static final String API_PROJECT = "https://api.tsd.usit.no/v1/" + PROJECT;
 	@Autowired
 	private MockMvc mockMvc;
 	@Value("${tsd.file.import}")
@@ -276,7 +276,7 @@ public class TSDStubControllerTests {
 		FileWriter writer = new FileWriter(testFile);
 
 		while (testFile.length() <= 1) {
-			writer.write("abcdefghijkl\n");
+			writer.write("abcdefghijkl");
 		}
 		writer.flush();
 		writer.close();
