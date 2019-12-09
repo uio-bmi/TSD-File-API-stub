@@ -7,6 +7,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -62,7 +63,7 @@ import no.uio.ifi.tsd.model.User;
 @Api(value = "TSD File Api Stub")
 public class TSDStubController {
 
-	private static final String DELETEING = "deleteing ";
+	private static final String DELETING = "deleting ";
 	public static final String CANNOT_DELETE_RESUMABLE = "cannot delete resumable";
 	public static final String RESUMABLE_DELETED = "resumable deleted";
 	public static final String STREAM_PROCESSING_FAILED = "stream processing failed";
@@ -340,16 +341,16 @@ public class TSDStubController {
 	private void mergeFiles(File dir, ResumableUpload resumable, String project) throws IOException {
 		String fileName = resumable.getFileName();
 		File uploadedFile = new File(String.format(durableFileImport, project), fileName);
-		try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(uploadedFile.getAbsolutePath()),
+		try (OutputStream outputStream = Files.newOutputStream(Paths.get(uploadedFile.getAbsolutePath()),
 				StandardOpenOption.CREATE, StandardOpenOption.APPEND);) {
 			for (int i = 1; i <= resumable.getMaxChunk().intValue(); i++) {
 				File chunkFile = createChunkFile(dir, fileName, i);
 				log.info("Reading from " + chunkFile);
-				try (BufferedReader reader = Files.newBufferedReader(Paths.get(chunkFile.getAbsolutePath()));) {
+				try (InputStream inputStream = Files.newInputStream(Paths.get(chunkFile.getAbsolutePath()))) {
 					log.info("writing to file " + uploadedFile.getAbsolutePath());
-					IOUtils.copy(reader, writer);
+					IOUtils.copy(inputStream, outputStream);
 				}
-				log.info(DELETEING + chunkFile.toPath());
+				log.info(DELETING + chunkFile.toPath());
 				Files.delete(chunkFile.toPath());
 			}
 		} catch (Exception e) {
@@ -367,10 +368,10 @@ public class TSDStubController {
 		String fileName = resumable.getFileName();
 		for (int i = 1; i <= resumable.getMaxChunk().intValue(); i++) {
 			File chunkFile = createChunkFile(dir, fileName, i);
-			log.info(DELETEING + chunkFile.toPath());
+			log.info(DELETING + chunkFile.toPath());
 			Files.delete(chunkFile.toPath());
 		}
-		log.info(DELETEING + dir.toPath());
+		log.info(DELETING + dir.toPath());
 		Files.delete(dir.toPath());
 	}
 
