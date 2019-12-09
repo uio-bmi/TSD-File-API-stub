@@ -13,7 +13,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -27,6 +26,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.DigestUtils;
 import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -62,6 +62,9 @@ import no.uio.ifi.tsd.model.User;
 @Api(value = "TSD File Api Stub")
 public class TSDStubController {
 
+	private static final String DELETEING = "deleteing ";
+	public static final String CANNOT_DELETE_RESUMABLE = "cannot delete resumable";
+	public static final String RESUMABLE_DELETED = "resumable deleted";
 	public static final String STREAM_PROCESSING_FAILED = "stream processing failed";
 	public static final String CHUNK_ORDER_INCORRECT = "chunk_order_incorrect";
 	public static final String DATA_STREAMED = "data streamed";
@@ -124,17 +127,17 @@ public class TSDStubController {
 	public ResponseEntity<String> upload(
 			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
-			@ApiParam(value = "FileName", example = "name.ext") @RequestHeader(required = false) String filename,
+			@ApiParam(value = "FileName", example = "name.ext") @RequestHeader(required = false, name = "filename") String fileName,
 			InputStream fileStream) throws IOException {
 		log.info("upload");
 
 		if (StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
 			throw new UnauthorizedException();
-		} else if (StringUtils.isEmpty(filename)) {
+		} else if (StringUtils.isEmpty(fileName)) {
 			return ResponseEntity.status(HttpStatus.OK).body(createJsonMessage(STREAM_PROCESSING_FAILED));
 		}
 
-		Path path = Paths.get(Files.createTempDirectory("temp").toString(), filename);
+		Path path = Paths.get(Files.createTempDirectory("temp").toString(), fileName);
 		try {
 			Files.copy(fileStream, path, StandardCopyOption.REPLACE_EXISTING);
 			log.info(path.getParent().toString());
@@ -155,7 +158,7 @@ public class TSDStubController {
 		if (StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
 			throw new UnauthorizedException();
 		}
-		ResumableUploads resumableChunks = readResumableChunks(project);
+		ResumableUploads resumableChunks = readResumableChunks();
 		return ResponseEntity.status(HttpStatus.OK).body(gson.toJson(resumableChunks));
 	}
 
@@ -164,28 +167,28 @@ public class TSDStubController {
 	public ResponseEntity<String> handleResumableUpload(
 			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
-			@ApiParam(value = "FileName", example = "name.ext") @PathVariable String filename,
+			@ApiParam(value = "FileName", example = "name.ext") @PathVariable(name = "filename") String fileName,
 			@ApiParam(value = "chunk", example = "1") @RequestParam String chunk,
 			@RequestParam(value = "id", required = false) String id,
 			@RequestBody(required = false) byte[] content) throws IOException {
 		log.info("upload chunk");
 		if (StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
 			throw new UnauthorizedException();
-		} else if (StringUtils.isEmpty(filename)) {
+		} else if (StringUtils.isEmpty(fileName)) {
 			return ResponseEntity.status(HttpStatus.OK).body(createJsonMessage(STREAM_PROCESSING_FAILED));
 		}
 		if (id == null) {
 			id = repository.save(new ResumableUpload()).getId();
 		}
 		File uploadFolder = generateUploadFolder(String.format(durableFileImport, project), id);
-		ResumableUploads resumableChunks = readResumableChunks(project);
+		ResumableUploads resumableChunks = readResumableChunks();
 
-		Chunk newChunk = createChunk(filename, chunk, id);
+		Chunk newChunk = createChunk(fileName, chunk, id);
 		ResumableUpload resumableUpload;
 
 		if (chunk.equals("1")) {
 			log.info("initializing chunk");
-			File chunkFile = saveChunk(uploadFolder, filename, content);
+			File chunkFile = saveChunk(uploadFolder, fileName, content);
 			resumableUpload = updateResumableUpload(createResumableUpload(newChunk), chunkFile);
 			resumableChunks.getResumables().add(resumableUpload);
 		} else if ("end".equalsIgnoreCase(chunk)) {
@@ -207,6 +210,39 @@ public class TSDStubController {
 
 		log.info(gson.toJson(newChunk));
 		return ResponseEntity.status(HttpStatus.CREATED).body(gson.toJson(newChunk));
+	}
+
+	@DeleteMapping(value = "/files/resumables/{filename}", produces = MediaType.APPLICATION_JSON_VALUE)
+	@ResponseBody()
+	public ResponseEntity<String> deleteResumableUpload(
+			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
+			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
+			@ApiParam(value = "FileName", example = "name.ext") @PathVariable(name = "filename") String fileName,
+			@RequestParam(value = "id", required = false) String id) throws IOException {
+		log.info("upload chunk");
+		if (StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
+			throw new UnauthorizedException();
+		} else if (StringUtils.isEmpty(fileName)) {
+			return ResponseEntity.status(HttpStatus.OK).body(createJsonMessage(STREAM_PROCESSING_FAILED));
+		}
+		if (StringUtils.isEmpty(id)) {
+			return badRequestCannotDelete();
+		}
+		File uploadFolder = generateUploadFolder(String.format(durableFileImport, project), id);
+
+		try {
+			ResumableUpload resumableUpload = getResumableUpload(id);
+			deleteFiles(uploadFolder, resumableUpload);
+			repository.delete(resumableUpload);
+		} catch (Exception e) {
+			return badRequestCannotDelete();
+		}
+
+		return ResponseEntity.status(HttpStatus.OK).body(createJsonMessage(RESUMABLE_DELETED));
+	}
+
+	private ResponseEntity<String> badRequestCannotDelete() {
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(createJsonMessage(CANNOT_DELETE_RESUMABLE));
 	}
 
 	private ResumableUpload updateResumableUpload(ResumableUpload resumableUpload, File chunkFile) throws IOException {
@@ -236,9 +272,9 @@ public class TSDStubController {
 		return resumableChunks;
 	}
 
-	private Chunk createChunk(String filename, String chunk, String id) {
+	private Chunk createChunk(String fileName, String chunk, String id) {
 		Chunk newChunk = new Chunk();
-		newChunk.setFileName(filename);
+		newChunk.setFileName(fileName);
 		newChunk.setId(id);
 		newChunk.setMaxChunk(chunk);
 		return newChunk;
@@ -257,22 +293,22 @@ public class TSDStubController {
 		return repository.findById(id).orElseThrow();
 	}
 
-	private ResumableUploads readResumableChunks(String project) {
+	private ResumableUploads readResumableChunks() {
 		ResumableUploads resumables = new ResumableUploads();
 		resumables.setResumables((List<ResumableUpload>) repository.findAll());
 		return resumables;
 	}
 
-	private File saveChunk(File uploadFolder, String chunk, String filename, byte[] content) throws IOException {
-		File chunkFile = new File(uploadFolder, String.format(filename.concat(".chunk.%s"), chunk));
+	private File saveChunk(File uploadFolder, String chunk, String fileName, byte[] content) throws IOException {
+		File chunkFile = createChunkFile(uploadFolder, fileName, Integer.valueOf(chunk));
 		log.info("Saving chunk " + chunkFile.getName() + " to " + uploadFolder.getCanonicalPath());
 		Files.write(chunkFile.toPath(), content);
 		log.info(chunkFile.getAbsolutePath());
 		return chunkFile;
 	}
 
-	private File saveChunk(File uploadFolder, String filename, byte[] content) throws IOException {
-		return saveChunk(uploadFolder, "1", filename, content);
+	private File saveChunk(File uploadFolder, String fileName, byte[] content) throws IOException {
+		return saveChunk(uploadFolder, "1", fileName, content);
 	}
 
 	private void finalizeChunks(File uploadFolder, String id, ResumableUploads resumableChunks, String project)
@@ -303,30 +339,39 @@ public class TSDStubController {
 
 	private void mergeFiles(File dir, ResumableUpload resumable, String project) throws IOException {
 		String fileName = resumable.getFileName();
-		List<File> chunkFiles = new ArrayList<>();
 		File uploadedFile = new File(String.format(durableFileImport, project), fileName);
-		for (int i = 1; i <= resumable.getMaxChunk().intValue(); i++) {
-			File chunkFile = new File(dir, String.format(fileName.concat(".chunk.%s"), i));
-			chunkFiles.add(chunkFile);
-			log.info("Reading from " + chunkFile);
-		}
-		joinFiles(uploadedFile, chunkFiles);
-		Files.delete(dir.toPath());
-	}
-
-	private void joinFiles(File destination, List<File> sources) throws IOException {
-		try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(destination.getAbsolutePath()),
+		try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(uploadedFile.getAbsolutePath()),
 				StandardOpenOption.CREATE, StandardOpenOption.APPEND);) {
-			for (File source : sources) {
-				try (BufferedReader reader = Files.newBufferedReader(Paths.get(source.getAbsolutePath()));) {
+			for (int i = 1; i <= resumable.getMaxChunk().intValue(); i++) {
+				File chunkFile = createChunkFile(dir, fileName, i);
+				log.info("Reading from " + chunkFile);
+				try (BufferedReader reader = Files.newBufferedReader(Paths.get(chunkFile.getAbsolutePath()));) {
+					log.info("writing to file " + uploadedFile.getAbsolutePath());
 					IOUtils.copy(reader, writer);
 				}
-				Files.delete(source.toPath());
+				log.info(DELETEING + chunkFile.toPath());
+				Files.delete(chunkFile.toPath());
 			}
 		} catch (Exception e) {
 			log.error(e.getMessage());
 			throw e;
 		}
+		Files.delete(dir.toPath());
+	}
+
+	private File createChunkFile(File dir, String fileName, int i) {
+		return new File(dir, String.format(fileName.concat(".chunk.%s"), i));
+	}
+
+	private void deleteFiles(File dir, ResumableUpload resumable) throws IOException {
+		String fileName = resumable.getFileName();
+		for (int i = 1; i <= resumable.getMaxChunk().intValue(); i++) {
+			File chunkFile = createChunkFile(dir, fileName, i);
+			log.info(DELETEING + chunkFile.toPath());
+			Files.delete(chunkFile.toPath());
+		}
+		log.info(DELETEING + dir.toPath());
+		Files.delete(dir.toPath());
 	}
 
 	private String createJsonMessage(String message) {

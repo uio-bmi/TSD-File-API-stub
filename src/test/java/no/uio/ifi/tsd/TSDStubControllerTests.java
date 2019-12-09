@@ -1,6 +1,7 @@
 package no.uio.ifi.tsd;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -14,10 +15,10 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Optional;
 import java.util.Random;
 
 import org.apache.tomcat.util.http.fileupload.FileUtils;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -59,7 +60,7 @@ public class TSDStubControllerTests {
 		File resumables = new File(String.format(durableFileImport, PROJECT));
 		if (resumables.exists()) {
 			try {
-				FileUtils.deleteDirectory(resumables);
+				FileUtils.cleanDirectory(resumables);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -240,13 +241,87 @@ public class TSDStubControllerTests {
 				.andExpect(jsonPath("$.filename").value(testFile.getName()));
 		this.mockMvc
 				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=end&id=" + chunk.getId())
-						// .content(readBytes(testFile))
 						.header("authorization", TOKEN))
 				.andDo(print())
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.max_chunk").value("end"))
 				.andExpect(jsonPath("$.id").value(chunk.getId()))
 				.andExpect(jsonPath("$.filename").value(testFile.getName()));
+	}
+
+	@Test
+	public void givenChunkWhenfileStreamDeleteThenPass() throws Exception {
+		File testFile = createTempFile();
+
+		ResultActions result = this.mockMvc
+				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=1")
+						.content(readBytes(testFile))
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.max_chunk").value("1"))
+				.andExpect(jsonPath("$.filename").value(testFile.getName()));
+		Chunk chunk = gson.fromJson(result.andReturn().getResponse().getContentAsString(), Chunk.class);
+		this.mockMvc
+				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=2&id=" + chunk.getId())
+						.content(readBytes(testFile))
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.max_chunk").value("2"))
+				.andExpect(jsonPath("$.id").value(chunk.getId()))
+				.andExpect(jsonPath("$.filename").value(testFile.getName()));
+
+		this.mockMvc
+				.perform(delete(API_PROJECT + "/files/resumables/" + testFile.getName() + "?id=" + chunk.getId())
+						.content(readBytes(testFile))
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.message").value(TSDStubController.RESUMABLE_DELETED));
+		
+		
+		ResultActions resultActions = this.mockMvc
+				.perform(get(API_PROJECT + "/files/resumables/")
+						.param("project", PROJECT)
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isOk());
+		Optional<ResumableUpload> resumableUpload = gson.fromJson(resultActions.andReturn().getResponse().getContentAsString(),
+				ResumableUploads.class)
+				.getResumables()
+				.stream()
+				.filter(u -> u.getId().equals(chunk.getId()))
+				.findAny();
+		assertEquals(true, resumableUpload.isEmpty());
+	
+		
+	}
+
+	@Test
+	public void givenWrongChunkWhenfileStreamDeleteThenBadRequest() throws Exception {
+		File testFile = createTempFile();
+
+		this.mockMvc
+				.perform(delete(API_PROJECT + "/files/resumables/" + testFile.getName() + "?id=" + "xxx")
+						.content(readBytes(testFile))
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(TSDStubController.CANNOT_DELETE_RESUMABLE));
+	}
+
+	@Test
+	public void givenMissingIdWhenfileStreamDeleteThenBadRequest() throws Exception {
+		File testFile = createTempFile();
+
+		this.mockMvc
+				.perform(delete(API_PROJECT + "/files/resumables/" + testFile.getName())
+						.content(readBytes(testFile))
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(TSDStubController.CANNOT_DELETE_RESUMABLE));
 	}
 
 	@Test
