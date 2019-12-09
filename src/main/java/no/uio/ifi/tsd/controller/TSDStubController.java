@@ -233,6 +233,7 @@ public class TSDStubController {
 		try {
 			ResumableUpload resumableUpload = getResumableUpload(id);
 			deleteFiles(uploadFolder, resumableUpload);
+			repository.delete(resumableUpload);
 		} catch (Exception e) {
 			return badRequestCannotDelete();
 		}

@@ -15,6 +15,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Optional;
 import java.util.Random;
 
 import org.apache.tomcat.util.http.fileupload.FileUtils;
@@ -278,6 +279,23 @@ public class TSDStubControllerTests {
 				.andDo(print())
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.message").value(TSDStubController.RESUMABLE_DELETED));
+		
+		
+		ResultActions resultActions = this.mockMvc
+				.perform(get(API_PROJECT + "/files/resumables/")
+						.param("project", PROJECT)
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isOk());
+		Optional<ResumableUpload> resumableUpload = gson.fromJson(resultActions.andReturn().getResponse().getContentAsString(),
+				ResumableUploads.class)
+				.getResumables()
+				.stream()
+				.filter(u -> u.getId().equals(chunk.getId()))
+				.findAny();
+		assertEquals(true, resumableUpload.isEmpty());
+	
+		
 	}
 
 	@Test
