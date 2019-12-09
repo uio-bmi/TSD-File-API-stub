@@ -63,7 +63,7 @@ import no.uio.ifi.tsd.model.User;
 @Api(value = "TSD File Api Stub")
 public class TSDStubController {
 
-	private static final String DELETEING = "deleteing ";
+	private static final String DELETING = "deleting ";
 	public static final String CANNOT_DELETE_RESUMABLE = "cannot delete resumable";
 	public static final String RESUMABLE_DELETED = "resumable deleted";
 	public static final String STREAM_PROCESSING_FAILED = "stream processing failed";
@@ -350,7 +350,7 @@ public class TSDStubController {
 					log.info("writing to file " + uploadedFile.getAbsolutePath());
 					IOUtils.copy(inputStream, outputStream);
 				}
-				log.info(DELETEING + chunkFile.toPath());
+				log.info(DELETING + chunkFile.toPath());
 				Files.delete(chunkFile.toPath());
 			}
 		} catch (Exception e) {
@@ -368,10 +368,10 @@ public class TSDStubController {
 		String fileName = resumable.getFileName();
 		for (int i = 1; i <= resumable.getMaxChunk().intValue(); i++) {
 			File chunkFile = createChunkFile(dir, fileName, i);
-			log.info(DELETEING + chunkFile.toPath());
+			log.info(DELETING + chunkFile.toPath());
 			Files.delete(chunkFile.toPath());
 		}
-		log.info(DELETEING + dir.toPath());
+		log.info(DELETING + dir.toPath());
 		Files.delete(dir.toPath());
 	}
 
