@@ -7,6 +7,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -340,14 +341,14 @@ public class TSDStubController {
 	private void mergeFiles(File dir, ResumableUpload resumable, String project) throws IOException {
 		String fileName = resumable.getFileName();
 		File uploadedFile = new File(String.format(durableFileImport, project), fileName);
-		try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(uploadedFile.getAbsolutePath()),
+		try (OutputStream outputStream = Files.newOutputStream(Paths.get(uploadedFile.getAbsolutePath()),
 				StandardOpenOption.CREATE, StandardOpenOption.APPEND);) {
 			for (int i = 1; i <= resumable.getMaxChunk().intValue(); i++) {
 				File chunkFile = createChunkFile(dir, fileName, i);
 				log.info("Reading from " + chunkFile);
-				try (BufferedReader reader = Files.newBufferedReader(Paths.get(chunkFile.getAbsolutePath()));) {
+				try (InputStream inputStream = Files.newInputStream(Paths.get(chunkFile.getAbsolutePath()))) {
 					log.info("writing to file " + uploadedFile.getAbsolutePath());
-					IOUtils.copy(reader, writer);
+					IOUtils.copy(inputStream, outputStream);
 				}
 				log.info(DELETEING + chunkFile.toPath());
 				Files.delete(chunkFile.toPath());
