@@ -15,6 +15,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.util.Optional;
 import java.util.Random;
 
@@ -149,6 +150,46 @@ public class TSDStubControllerTests {
 	}
 
 	@Test
+	public void givenNameWhenFolderThenCreated() throws Exception {
+
+		this.mockMvc
+				.perform(put(API_PROJECT + "/files/folder")
+						.header("name", "newFolder")
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.message").value("folder created"));
+	}
+
+	@Test
+	public void givenNameWhenFolderTwiceThenCreated() throws Exception {
+
+		this.mockMvc
+				.perform(put(API_PROJECT + "/files/folder")
+						.header("name", "newFolder")
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.message").value("folder created"));
+		this.mockMvc
+				.perform(put(API_PROJECT + "/files/folder")
+						.header("name", "newFolder")
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isInternalServerError());
+	}
+
+	@Test
+	public void givenMissingNameWhenFolderThenCreated() throws Exception {
+
+		this.mockMvc
+				.perform(put(API_PROJECT + "/files/folder")
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
 	public void givenNoAuthorizationWhenfileStreamThenAuthenticationFailed() throws Exception {
 		File testFile = createTempFile();
 
@@ -250,6 +291,38 @@ public class TSDStubControllerTests {
 	}
 
 	@Test
+	public void givenLargeChunkWhenfileStreamChunkThenPass() throws Exception {
+		File testFile = createFile(10240 * 1024l);
+
+		ResultActions result = this.mockMvc
+				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=1")
+						.content(readBytes(testFile))
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.max_chunk").value("1"))
+				.andExpect(jsonPath("$.filename").value(testFile.getName()));
+		Chunk chunk = gson.fromJson(result.andReturn().getResponse().getContentAsString(), Chunk.class);
+		this.mockMvc
+				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=2&id=" + chunk.getId())
+						.content(readBytes(testFile))
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.max_chunk").value("2"))
+				.andExpect(jsonPath("$.id").value(chunk.getId()))
+				.andExpect(jsonPath("$.filename").value(testFile.getName()));
+		this.mockMvc
+				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=end&id=" + chunk.getId())
+						.header("authorization", TOKEN))
+				.andDo(print())
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.max_chunk").value("end"))
+				.andExpect(jsonPath("$.id").value(chunk.getId()))
+				.andExpect(jsonPath("$.filename").value(testFile.getName()));
+	}
+
+	@Test
 	public void givenChunkWhenfileStreamDeleteThenPass() throws Exception {
 		File testFile = createTempFile();
 
@@ -279,23 +352,23 @@ public class TSDStubControllerTests {
 				.andDo(print())
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.message").value(TSDStubController.RESUMABLE_DELETED));
-		
-		
+
 		ResultActions resultActions = this.mockMvc
 				.perform(get(API_PROJECT + "/files/resumables/")
 						.param("project", PROJECT)
 						.header("authorization", TOKEN))
 				.andDo(print())
 				.andExpect(status().isOk());
-		Optional<ResumableUpload> resumableUpload = gson.fromJson(resultActions.andReturn().getResponse().getContentAsString(),
+		Optional<ResumableUpload> resumableUpload = gson.fromJson(resultActions.andReturn()
+				.getResponse()
+				.getContentAsString(),
 				ResumableUploads.class)
 				.getResumables()
 				.stream()
 				.filter(u -> u.getId().equals(chunk.getId()))
 				.findAny();
 		assertEquals(true, resumableUpload.isEmpty());
-	
-		
+
 	}
 
 	@Test
@@ -362,4 +435,15 @@ public class TSDStubControllerTests {
 		return new FileInputStream(testFile).readAllBytes();
 	}
 
+	private File createFile(final long sizeInBytes) throws IOException {
+		File file = File.createTempFile(new Random().nextInt() + "", "fdf");
+
+		log.info(file.getAbsolutePath());
+		RandomAccessFile raf = new RandomAccessFile(file, "rw");
+		raf.setLength(sizeInBytes);
+		raf.close();
+		log.info("" + file.length());
+
+		return file;
+	}
 }
