@@ -291,38 +291,6 @@ public class TSDStubControllerTests {
 	}
 
 	@Test
-	public void givenLargeChunkWhenfileStreamChunkThenPass() throws Exception {
-		File testFile = createFile(10240 * 1024l);
-
-		ResultActions result = this.mockMvc
-				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=1")
-						.content(readBytes(testFile))
-						.header("authorization", TOKEN))
-				.andDo(print())
-				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.max_chunk").value("1"))
-				.andExpect(jsonPath("$.filename").value(testFile.getName()));
-		Chunk chunk = gson.fromJson(result.andReturn().getResponse().getContentAsString(), Chunk.class);
-		this.mockMvc
-				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=2&id=" + chunk.getId())
-						.content(readBytes(testFile))
-						.header("authorization", TOKEN))
-				.andDo(print())
-				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.max_chunk").value("2"))
-				.andExpect(jsonPath("$.id").value(chunk.getId()))
-				.andExpect(jsonPath("$.filename").value(testFile.getName()));
-		this.mockMvc
-				.perform(patch(API_PROJECT + "/files/stream/" + testFile.getName() + "?chunk=end&id=" + chunk.getId())
-						.header("authorization", TOKEN))
-				.andDo(print())
-				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.max_chunk").value("end"))
-				.andExpect(jsonPath("$.id").value(chunk.getId()))
-				.andExpect(jsonPath("$.filename").value(testFile.getName()));
-	}
-
-	@Test
 	public void givenChunkWhenfileStreamDeleteThenPass() throws Exception {
 		File testFile = createTempFile();
 
