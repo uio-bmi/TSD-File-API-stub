@@ -154,8 +154,8 @@ public class TSDStubControllerTests {
 
 		this.mockMvc
 				.perform(put(API_PROJECT + "/files/folder")
-						.header("name", "newFolder")
-						.header("authorization", TOKEN))
+						.header("authorization", TOKEN)
+						.param("name", "newFolder"))
 				.andDo(print())
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.message").value("folder created"));

@@ -152,7 +152,7 @@ public class TSDStubController {
 	public ResponseEntity<String> createFolder(
 			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
-			@ApiParam(value = "FolderName", example = "name") @RequestHeader(required = true, name = "name") String name)
+			@ApiParam(value = "FolderName", example = "name") @RequestParam(required = true, name = "name") String name)
 			throws IOException {
 		log.info("create folder ");
 
