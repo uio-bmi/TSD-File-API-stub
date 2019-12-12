@@ -2,8 +2,6 @@ package no.uio.ifi.tsd.controller;
 
 import static org.springframework.security.oauth2.core.OAuth2AccessToken.TokenType.BEARER;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -147,6 +145,34 @@ public class TSDStubController {
 		}
 
 		return ResponseEntity.status(HttpStatus.CREATED).body(createJsonMessage(DATA_STREAMED));
+	}
+
+	@PutMapping(value = "/files/folder", produces = MediaType.APPLICATION_JSON_VALUE)
+	@ResponseBody()
+	public ResponseEntity<String> createFolder(
+			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
+			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
+			@ApiParam(value = "FolderName", example = "name") @RequestParam(required = true, name = "name") String name)
+			throws IOException {
+		log.info("create folder ");
+
+		if (StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
+			throw new UnauthorizedException();
+		} else if (StringUtils.isEmpty(name)) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(createJsonMessage("miising name"));
+		}
+
+		Path path = Paths.get(String.format(durableFileImport, project), name);
+		try {
+			Files.createDirectory(path);
+			log.info("created: " + path.toString());
+		} catch (IOException e) {
+			log.error(e.getMessage());
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+					.body(createJsonMessage(e.getClass().getTypeName() + e.getMessage()));
+		}
+
+		return ResponseEntity.status(HttpStatus.CREATED).body(createJsonMessage("folder created"));
 	}
 
 	@GetMapping(value = "/files/resumables", produces = MediaType.APPLICATION_JSON_VALUE)
