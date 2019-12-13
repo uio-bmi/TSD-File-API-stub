@@ -152,8 +152,7 @@ public class TSDStubController {
 	public ResponseEntity<String> createFolder(
 			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
-			@ApiParam(value = "FolderName", example = "name") @RequestParam(required = true, name = "name") String name)
-			throws IOException {
+			@ApiParam(value = "FolderName", example = "name") @RequestParam(required = true, name = "name") String name) {
 		log.info("create folder ");
 
 		if (StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
@@ -245,7 +244,7 @@ public class TSDStubController {
 			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
 			@ApiParam(value = "FileName", example = "name.ext") @PathVariable(name = "filename") String fileName,
-			@RequestParam(value = "id", required = false) String id) throws IOException {
+			@RequestParam(value = "id", required = false) String id) {
 		log.info("upload chunk");
 		if (StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
 			throw new UnauthorizedException();
@@ -327,7 +326,7 @@ public class TSDStubController {
 	}
 
 	private File saveChunk(File uploadFolder, String chunk, String fileName, byte[] content) throws IOException {
-		File chunkFile = createChunkFile(uploadFolder, fileName, Integer.valueOf(chunk));
+		File chunkFile = createChunkFile(uploadFolder, fileName, Integer.parseInt(chunk));
 		log.info("Saving chunk " + chunkFile.getName() + " to " + uploadFolder.getCanonicalPath());
 		Files.write(chunkFile.toPath(), content);
 		log.info(chunkFile.getAbsolutePath());
