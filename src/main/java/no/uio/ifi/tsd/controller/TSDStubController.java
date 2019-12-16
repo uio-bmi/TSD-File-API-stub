@@ -54,6 +54,16 @@ import no.uio.ifi.tsd.model.ResumableUpload;
 import no.uio.ifi.tsd.model.ResumableUploadRepository;
 import no.uio.ifi.tsd.model.ResumableUploads;
 import no.uio.ifi.tsd.model.User;
+import javax.crypto.spec.SecretKeySpec;
+import javax.xml.bind.DatatypeConverter;
+import java.security.Key;
+
+import io.jsonwebtoken.*;
+
+import java.util.Date;
+
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.Claims;
 
 @RestController
 @RequestMapping("/v1/{project}")
@@ -61,6 +71,8 @@ import no.uio.ifi.tsd.model.User;
 @Api(value = "TSD File Api Stub")
 public class TSDStubController {
 
+	private static final int ONE_HOUR = 3600000;
+	private static final String TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOm51bGwsImV4cCI6MTU3NDE2MTU4OSwiZ3JvdXBzIjpbInAxMS1hbWdhZHNoLWdyb3VwIiwicDExLW1lbWJlci1ncm91cCIsInAxMS1leHBvcnQtZ3JvdXAiXSwicGlkIjpudWxsLCJwcm9qIjoicDExIiwiciI6IiQyYiQxMiRQYS5zYTBpQm96MVQzVUVxWksualF1NEYzcEZMaHovci5vWXBTZTcvMFMvSkhFeHJ2cFFTUyIsInJvbGUiOiJpbXBvcnRfdXNlciIsInUiOiIkMmIkMTIkdWRhSzBpbFpOS0R5dkQ5RzNtQTdCdWJtUE1rek4xWlF4UG4ubS9vNlVscVA4ZkdLMnBPcm0iLCJ1c2VyIjoicDExLWFtZ2Fkc2gifQ.bf4I1EQz812SmVa8twH6gF-BNE2QeAK-N1234567890";
 	private static final String DELETING = "deleting ";
 	public static final String CANNOT_DELETE_RESUMABLE = "cannot delete resumable";
 	public static final String RESUMABLE_DELETED = "resumable deleted";
@@ -73,6 +85,13 @@ public class TSDStubController {
 
 	@Value("${tsd.file.import}")
 	public String durableFileImport;
+
+	public static String SECRET_KEY;
+
+	@Value("${tsd.file.secretkey}")
+	public void setSecretKey(String secretKey) {
+		SECRET_KEY = secretKey;
+	}
 
 	@Autowired
 	private ResumableUploadRepository repository;
@@ -95,9 +114,8 @@ public class TSDStubController {
 				.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
 			throw new UnauthorizedException();
 		} else {
-			return new JSONObject().put("token",
-					"eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOm51bGwsImV4cCI6MTU3NDE2MTU4OSwiZ3JvdXBzIjpbInAxMS1hbWdhZHNoLWdyb3VwIiwicDExLW1lbWJlci1ncm91cCIsInAxMS1leHBvcnQtZ3JvdXAiXSwicGlkIjpudWxsLCJwcm9qIjoicDExIiwiciI6IiQyYiQxMiRQYS5zYTBpQm96MVQzVUVxWksualF1NEYzcEZMaHovci5vWXBTZTcvMFMvSkhFeHJ2cFFTUyIsInJvbGUiOiJpbXBvcnRfdXNlciIsInUiOiIkMmIkMTIkdWRhSzBpbFpOS0R5dkQ5RzNtQTdCdWJtUE1rek4xWlF4UG4ubS9vNlVscVA4ZkdLMnBPcm0iLCJ1c2VyIjoicDExLWFtZ2Fkc2gifQ.bf4I1EQz812SmVa8twH6gF-BNE2QeAK-N1234567890")
-					.toString();
+			String jwtToken = createJWT(userName, "TSD", userName, ONE_HOUR);
+			return new JSONObject().put("token", jwtToken).toString();
 		}
 	}
 
@@ -115,9 +133,7 @@ public class TSDStubController {
 				.getValue())) {
 			throw new UnauthorizedException();
 		} else {
-			return new JSONObject().put("token",
-					"eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOm51bGwsImV4cCI6MTU3NDE2MTU4OSwiZ3JvdXBzIjpbInAxMS1hbWdhZHNoLWdyb3VwIiwicDExLW1lbWJlci1ncm91cCIsInAxMS1leHBvcnQtZ3JvdXAiXSwicGlkIjpudWxsLCJwcm9qIjoicDExIiwiciI6IiQyYiQxMiRQYS5zYTBpQm96MVQzVUVxWksualF1NEYzcEZMaHovci5vWXBTZTcvMFMvSkhFeHJ2cFFTUyIsInJvbGUiOiJpbXBvcnRfdXNlciIsInUiOiIkMmIkMTIkdWRhSzBpbFpOS0R5dkQ5RzNtQTdCdWJtUE1rek4xWlF4UG4ubS9vNlVscVA4ZkdLMnBPcm0iLCJ1c2VyIjoicDExLWFtZ2Fkc2gifQ.bf4I1EQz812SmVa8twH6gF-BNE2QeAK-N1234567890")
-					.toString();
+			return new JSONObject().put("token", TOKEN).toString();
 		}
 	}
 
@@ -135,8 +151,7 @@ public class TSDStubController {
 		} else if (StringUtils.isEmpty(fileName)) {
 			return ResponseEntity.status(HttpStatus.OK).body(createJsonMessage(STREAM_PROCESSING_FAILED));
 		}
-
-		Path path = Paths.get(Files.createTempDirectory("temp").toString(), fileName);
+		Path path = Paths.get(String.format(durableFileImport, project), fileName);
 		try {
 			Files.copy(fileStream, path, StandardCopyOption.REPLACE_EXISTING);
 			log.info(path.getParent().toString());
@@ -402,5 +417,39 @@ public class TSDStubController {
 
 	private String createJsonMessage(String message) {
 		return new JSONObject().put("message", message).toString();
+	}
+
+	public static String createJWT(String id, String issuer, String subject, long ttlMillis) {
+
+		SignatureAlgorithm signatureAlgorithm = SignatureAlgorithm.HS256;
+
+		long nowMillis = System.currentTimeMillis();
+		Date now = new Date(nowMillis);
+
+		byte[] apiKeySecretBytes = DatatypeConverter.parseBase64Binary(SECRET_KEY);
+		Key signingKey = new SecretKeySpec(apiKeySecretBytes, signatureAlgorithm.getJcaName());
+
+		JwtBuilder builder = Jwts.builder()
+				.setId(id)
+				.setIssuedAt(now)
+				.setSubject(subject)
+				.setIssuer(issuer)
+				.signWith(signatureAlgorithm, signingKey);
+
+		if (ttlMillis > 0) {
+			long expMillis = nowMillis + ttlMillis;
+			Date exp = new Date(expMillis);
+			builder.setExpiration(exp);
+		}
+
+		return builder.compact();
+	}
+
+	public static Claims decodeJWT(String jwt) {
+		Claims claims = Jwts.parser()
+				.setSigningKey(DatatypeConverter.parseBase64Binary(SECRET_KEY))
+				.parseClaimsJws(jwt)
+				.getBody();
+		return claims;
 	}
 }

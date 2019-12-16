@@ -30,10 +30,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 
 import com.google.gson.Gson;
+import com.jayway.jsonpath.JsonPath;
 
+import io.jsonwebtoken.Claims;
 import lombok.extern.slf4j.Slf4j;
 import no.uio.ifi.tsd.controller.TSDStubController;
 import no.uio.ifi.tsd.enums.TokenType;
@@ -71,15 +74,24 @@ public class TSDStubControllerTests {
 	@Test
 	public void givenFullRequestwhenTSDThenToken() throws Exception {
 
-		this.mockMvc
+		String userName = "p11-user123";
+		MvcResult result = this.mockMvc
 				.perform(post(API_PROJECT + "/auth/tsd/token").param("type", TokenType.IMPORT.name())
 						.header("authorization", "Bearer token")
 						.header("Content-Type", MediaType.APPLICATION_JSON)
-						.content("{" + "\"user_name\": \"p11-user123\"," + "\"otp\": \"113943\","
+						.content("{" + "\"user_name\": \""
+								+ userName
+								+ "\"," + "\"otp\": \"113943\","
 								+ "\"password\": \"password123456\"" + "}"))
 				.andDo(print())
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.token").exists());
+				.andExpect(jsonPath("$.token").exists())
+				.andReturn();
+		String token = JsonPath.read(result.getResponse().getContentAsString(), "$.token");
+		Claims claims = TSDStubController.decodeJWT(token);
+		assertEquals(userName, claims.getId());
+		assertEquals("TSD", claims.getIssuer());
+		assertEquals(userName, claims.getSubject());
 	}
 
 	@Test
