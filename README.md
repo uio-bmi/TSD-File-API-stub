@@ -8,3 +8,8 @@ TSD file API documentation can be found at https://test.api.tsd.usit.no/v1/docs/
 
 ## Swagger API
 https://localhost:8080/swagger-ui.html....
+
+## configuration 
+you need to define 
+1. location for file upload by setting property `tsd.file.import` in `application.yml' file  or by setting environment variable `${DURABLE_FILE_IMPORT}` default `/tsd/%s/data/durable/file-import/` you need to put `%s` as a placeholder for project name
+1. secret that will be used in creating and decoding JWT token by setting property `tsd.file.secretkey` in `application.yml` file  or by setting environment variable `${SECRET_KEY}`
