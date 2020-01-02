@@ -13,3 +13,20 @@ https://localhost:8080/swagger-ui.html....
 you need to define 
 1. location for file upload by setting property `tsd.file.import` in `application.yml` file  or by setting environment variable `${DURABLE_FILE_IMPORT}` default `/tsd/%s/data/durable/file-import/` you need to put `%s` as a placeholder for project name
 1. secret that will be used in creating and decoding JWT token by setting property `tsd.file.secretkey` in `application.yml` file  or by setting environment variable `${SECRET_KEY}`
+
+## signup flow
+```
+	client                                         API
+    ------                                         ---
+    client_name, email            -------------->  /auth/basic/signup
+                                  <--------------  client_id
+                                  
+    client_name, email,client_id  -------------->  /auth/basic/signupconfirm
+                                  <--------------  confirmation_token 
+                                  
+    client_id, confirmation_token -------------->  /auth/basic/confirm
+                                  <--------------  password
+                                                   (details verified by TSD)
+    client_id, password           -------------->  /auth/basic/api_key
+                                  <--------------  api_key
+```
