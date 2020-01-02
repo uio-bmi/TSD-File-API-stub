@@ -13,15 +13,18 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.security.Key;
+import java.security.SecureRandom;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import javax.crypto.spec.SecretKeySpec;
 import javax.xml.bind.DatatypeConverter;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -63,6 +66,8 @@ import lombok.extern.slf4j.Slf4j;
 import no.uio.ifi.tsd.enums.TokenType;
 import no.uio.ifi.tsd.exception.UnauthorizedException;
 import no.uio.ifi.tsd.model.Chunk;
+import no.uio.ifi.tsd.model.Client;
+import no.uio.ifi.tsd.model.ClientRepository;
 import no.uio.ifi.tsd.model.ResumableUpload;
 import no.uio.ifi.tsd.model.ResumableUploadRepository;
 import no.uio.ifi.tsd.model.ResumableUploads;
@@ -75,7 +80,7 @@ import no.uio.ifi.tsd.model.User;
 public class TSDStubController {
 
 	private static final int ONE_HOUR = 3600000;
-	private static final String TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOm51bGwsImV4cCI6MTU3NDE2MTU4OSwiZ3JvdXBzIjpbInAxMS1hbWdhZHNoLWdyb3VwIiwicDExLW1lbWJlci1ncm91cCIsInAxMS1leHBvcnQtZ3JvdXAiXSwicGlkIjpudWxsLCJwcm9qIjoicDExIiwiciI6IiQyYiQxMiRQYS5zYTBpQm96MVQzVUVxWksualF1NEYzcEZMaHovci5vWXBTZTcvMFMvSkhFeHJ2cFFTUyIsInJvbGUiOiJpbXBvcnRfdXNlciIsInUiOiIkMmIkMTIkdWRhSzBpbFpOS0R5dkQ5RzNtQTdCdWJtUE1rek4xWlF4UG4ubS9vNlVscVA4ZkdLMnBPcm0iLCJ1c2VyIjoicDExLWFtZ2Fkc2gifQ.bf4I1EQz812SmVa8twH6gF-BNE2QeAK-N1234567890";
+	private static final int ONE_Year = 356 * 24 * ONE_HOUR;
 	private static final String DELETING = "deleting ";
 	public static final String CANNOT_DELETE_RESUMABLE = "cannot delete resumable";
 	public static final String RESUMABLE_DELETED = "resumable deleted";
@@ -89,7 +94,7 @@ public class TSDStubController {
 	@Value("${tsd.file.import}")
 	public String durableFileImport;
 
-	public static String SECRET_KEY;
+	private static String SECRET_KEY;
 
 	@Value("${tsd.file.secretkey}")
 	public void setSecretKey(String secretKey) {
@@ -98,6 +103,113 @@ public class TSDStubController {
 
 	@Autowired
 	private ResumableUploadRepository repository;
+
+	@Autowired
+	private ClientRepository clientRepository;
+
+	@ApiResponses(value = { @ApiResponse(code = 200, message = "token retrieved succesfully"),
+			@ApiResponse(code = 401, message = "You are not authorized to get token"), })
+	@PostMapping(value = "/auth/basic/signup", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+	@ResponseBody
+	public String signup(
+			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
+			@RequestBody Client data) {
+
+		String clientName = data.getClientName();
+		String email = data.getEmail();
+		data.setUserName(email);
+
+		if (StringUtils.isEmpty(clientName) || StringUtils.isEmpty(email)) {
+			throw new UnauthorizedException();
+		} else {
+			data.setConfirmationToken(createJWT(email, "TSD", email, ONE_HOUR));
+			Client save = clientRepository.save(data);
+			return new JSONObject().put("client_id", save.getClientId()).toString();
+		}
+	}
+
+	@ApiResponses(value = { @ApiResponse(code = 200, message = "token retrieved succesfully"),
+			@ApiResponse(code = 401, message = "You are not authorized to get token"), })
+	@PostMapping(value = "/auth/basic/signupconfirm", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+	@ResponseBody
+	public String signupConfirmation(
+			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
+			@RequestBody Client data) {
+
+		String clientName = data.getClientName();
+		String email = data.getEmail();
+		String clientID = data.getClientId();
+
+		if (StringUtils.isEmpty(clientName) || StringUtils.isEmpty(email) || StringUtils.isEmpty(clientID)) {
+			throw new UnauthorizedException();
+		} else {
+			Client save = clientRepository.findById(clientID).orElseThrow();
+			if (save.getEmail().equals(email) && save.getClientName().equals(clientName)) {
+				return new JSONObject().put("confirmation_token", save.getConfirmationToken()).toString();
+			} else {
+				throw new UnauthorizedException();
+			}
+		}
+	}
+
+	@ApiResponses(value = { @ApiResponse(code = 200, message = "token retrieved succesfully"),
+			@ApiResponse(code = 401, message = "You are not authorized to get token"), })
+	@PostMapping(value = "/auth/basic/confirm", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+	@ResponseBody
+	public String confirm(
+			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
+			@RequestBody Client client) {
+
+		String clientId = client.getClientId();
+		String confirmationToken = client.getConfirmationToken();
+
+		if (StringUtils.isEmpty(clientId) || StringUtils.isEmpty(confirmationToken)) {
+			throw new UnauthorizedException();
+		} else {
+			Optional<Client> findById = clientRepository.findById(clientId);
+			if (findById.isPresent()) {
+
+				char[] possibleCharacters = (new String(
+						"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789~`!@#$%^&*()-_=+[{]}|;:,<.>/?"))
+								.toCharArray();
+				int passwordLength = 12;
+				String password = RandomStringUtils.random(passwordLength, 0, possibleCharacters.length - 1, false,
+						false,
+						possibleCharacters, new SecureRandom());
+				Client client2 = findById.get();
+				client2.setPassword(password);
+				clientRepository.save(client2);
+				return new JSONObject().put("password", password).toString();
+			} else
+				throw new UnauthorizedException();
+
+		}
+	}
+
+	@ApiResponses(value = { @ApiResponse(code = 200, message = "token retrieved succesfully"),
+			@ApiResponse(code = 401, message = "You are not authorized to get token"), })
+	@PostMapping(value = "/auth/basic/api_key", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+	@ResponseBody
+	public String getApiKey(
+			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
+			@RequestBody Client client) {
+
+		String clientId = client.getClientId();
+		String password = client.getPassword();
+
+		if (StringUtils.isEmpty(clientId) || StringUtils.isEmpty(password)) {
+			throw new UnauthorizedException();
+		} else {
+
+			Client findByClientIdAndPassword = clientRepository.findByClientIdAndPassword(clientId, password);
+			if (findByClientIdAndPassword == null) {
+				throw new UnauthorizedException();
+			}
+			String userName = findByClientIdAndPassword.getUserName();
+			String jwtToken = createJWT(userName, "TSD", userName, ONE_Year);
+			return new JSONObject().put("api_key", jwtToken).toString();
+		}
+	}
 
 	@ApiResponses(value = { @ApiResponse(code = 200, message = "token retrieved succesfully"),
 			@ApiResponse(code = 401, message = "You are not authorized to get token"), })
@@ -109,7 +221,7 @@ public class TSDStubController {
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
 			@RequestBody User data) {
 
-		String userName = data.getUser_name();
+		String userName = data.getUserName();
 		String otp = data.getOtp();
 		String password = data.getPassword();
 
@@ -117,6 +229,9 @@ public class TSDStubController {
 				.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
 			throw new UnauthorizedException();
 		} else {
+			if (!verifyToken(authorization)) {
+				throw new UnauthorizedException();
+			}
 			String jwtToken = createJWT(userName, "TSD", userName, ONE_HOUR);
 			return new JSONObject().put("token", jwtToken).toString();
 		}
@@ -136,7 +251,8 @@ public class TSDStubController {
 				.getValue())) {
 			throw new UnauthorizedException();
 		} else {
-			return new JSONObject().put("token", TOKEN).toString();
+			String jwtToken = createJWT("user", "TSD", "user", ONE_HOUR);
+			return new JSONObject().put("token", jwtToken).toString();
 		}
 	}
 
@@ -299,6 +415,7 @@ public class TSDStubController {
 		try {
 			decodeJWT(authorization.substring("Bearer ".length()));
 		} catch (Exception e) {
+			log.error(e.getMessage());
 			return false;
 		}
 		return true;
@@ -468,6 +585,7 @@ public class TSDStubController {
 	}
 
 	public static Claims decodeJWT(String jwt) throws RuntimeException {
+		log.info(jwt);
 		Claims claims = null;
 		try {
 			claims = Jwts.parser()
@@ -476,7 +594,6 @@ public class TSDStubController {
 					.getBody();
 		} catch (ExpiredJwtException | UnsupportedJwtException | MalformedJwtException | SignatureException
 				| IllegalArgumentException e) {
-			e.printStackTrace();
 			log.error(e.getCause() + e.getMessage());
 			throw e;
 		}

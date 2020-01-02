@@ -1,6 +1,7 @@
 package no.uio.ifi.tsd;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.security.oauth2.core.OAuth2AccessToken.TokenType.BEARER;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -9,20 +10,19 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.security.oauth2.core.OAuth2AccessToken.TokenType.BEARER;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.io.UnsupportedEncodingException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.security.SecureRandom;
 import java.util.Optional;
 import java.util.Random;
 
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,10 +63,11 @@ public class TSDStubControllerTests {
 	@Value("${tsd.file.import}")
 	private String durableFileImport;
 	private Gson gson = new Gson();
-	private String userName = "p11-user123";
+	private String userName;
+	private String email;
 
 	@BeforeEach
-	public void setup() {
+	public void setup() throws UnsupportedEncodingException, Exception {
 		File resumables = new File(String.format(durableFileImport, PROJECT));
 		if (resumables.exists()) {
 			try {
@@ -75,14 +76,108 @@ public class TSDStubControllerTests {
 				e.printStackTrace();
 			}
 		}
+		char[] possibleCharacters = (new String("abcdefghijklmnopqrstuvwxyz0123456789")).toCharArray();
+		int passwordLength = 8;
+		userName = RandomStringUtils.random(passwordLength, 0, possibleCharacters.length - 1, false,
+				false,
+				possibleCharacters, new SecureRandom());
+		email = userName;
+	}
+
+	@Test
+	public void givenFullRequestwhenSignupThenClientId() throws Exception {
+
+		ResultActions resultActions = this.mockMvc
+				.perform(post(API_PROJECT + "/auth/basic/signup")
+						.header("Content-Type", MediaType.APPLICATION_JSON)
+						.content("{" + "\"email\": \"" + userName + "\","
+								+ "\"client_name\": \"client1\"" + "}"));
+		resultActions
+				.andDo(print())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.client_id").exists())
+				.andReturn();
+	}
+
+	@Test
+	public void givenFullRequestwhenSignupConfirmThenClientId() throws Exception {
+		ResultActions resultActions = this.mockMvc
+				.perform(post(API_PROJECT + "/auth/basic/signup")
+						.header("Content-Type", MediaType.APPLICATION_JSON)
+						.content("{" + "\"email\": \"" + userName + "\","
+								+ "\"client_name\": \"client1\"" + "}"));
+		MvcResult result = resultActions
+				.andDo(print())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.client_id").exists())
+				.andReturn();
+
+		resultActions = this.mockMvc
+				.perform(post(API_PROJECT + "/auth/basic/signupconfirm")
+						.header("Content-Type", MediaType.APPLICATION_JSON)
+						.content("{"
+								+ "\"email\": \"" + userName + "\","
+								+ "\"client_id\": \"" + JsonPath.read(result.getResponse().getContentAsString(),
+										"$.client_id") + "\","
+								+ "\"client_name\": \"client1\""
+								+ "}"));
+		result = resultActions
+				.andDo(print())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.confirmation_token").exists())
+				.andReturn();
+	}
+
+	@Test
+	public void givenFullRequestwhenConfirmThenClientId() throws Exception {
+		ResultActions resultActions = this.mockMvc
+				.perform(post(API_PROJECT + "/auth/basic/signup")
+						.header("Content-Type", MediaType.APPLICATION_JSON)
+						.content("{" + "\"email\": \"" + userName + "\","
+								+ "\"client_name\": \"client1\"" + "}"));
+		MvcResult result = resultActions
+				.andDo(print())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.client_id").exists())
+				.andReturn();
+
+		Object clientId = JsonPath.read(result.getResponse().getContentAsString(),
+				"$.client_id");
+		resultActions = this.mockMvc
+				.perform(post(API_PROJECT + "/auth/basic/signupconfirm")
+						.header("Content-Type", MediaType.APPLICATION_JSON)
+						.content("{"
+								+ "\"email\": \"" + userName + "\","
+								+ "\"client_id\": \"" + clientId + "\","
+								+ "\"client_name\": \"client1\""
+								+ "}"));
+		result = resultActions
+				.andDo(print())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.confirmation_token").exists())
+				.andReturn();
+		String contentAsString = result.getResponse().getContentAsString();
+		resultActions = this.mockMvc
+				.perform(post(API_PROJECT + "/auth/basic/confirm")
+						.header("Content-Type", MediaType.APPLICATION_JSON)
+						.content("{"
+								+ "\"client_id\": \"" + clientId + "\","
+								+ "\"confirmation_token\": \"" + JsonPath.read(contentAsString, "$.confirmation_token")
+								+ "\""
+								+ "}"));
+		result = resultActions
+				.andDo(print())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.password").exists())
+				.andReturn();
 	}
 
 	@Test
 	public void givenFullRequestwhenTSDThenToken() throws Exception {
-
+		String apiKey = getToken();
 		ResultActions resultActions = this.mockMvc
 				.perform(post(API_PROJECT + "/auth/tsd/token").param("type", TokenType.IMPORT.name())
-						.header("authorization", "Bearer token")
+						.header("authorization", apiKey)
 						.header("Content-Type", MediaType.APPLICATION_JSON)
 						.content("{" + "\"user_name\": \""
 								+ userName
@@ -422,14 +517,68 @@ public class TSDStubControllerTests {
 
 	private String getToken() throws Exception, UnsupportedEncodingException {
 		ResultActions resultActions = this.mockMvc
-				.perform(post(API_PROJECT + "/auth/tsd/token").param("type", TokenType.IMPORT.name())
-						.header("authorization", "Bearer token")
+				.perform(post(API_PROJECT + "/auth/basic/signup")
 						.header("Content-Type", MediaType.APPLICATION_JSON)
-						.content("{" + "\"user_name\": \""
-								+ userName
-								+ "\"," + "\"otp\": \"113943\","
-								+ "\"password\": \"password123456\"" + "}"));
+						.content("{" + "\"client_name\": \"" + userName + "\","
+								+ "\"email\": \"" + email + "\""
+								+ "}"));
 		MvcResult result = resultActions
+				.andDo(print())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.client_id").exists())
+				.andReturn();
+		String client_id = JsonPath.read(result.getResponse().getContentAsString(), "$.client_id");
+
+		resultActions = this.mockMvc
+				.perform(post(API_PROJECT + "/auth/basic/signupconfirm")
+						.header("Content-Type", MediaType.APPLICATION_JSON)
+						.content("{" + "\"client_name\": \"" + userName + "\","
+								+ "\"client_id\": \"" + client_id + "\","
+								+ "\"email\": \"" + email + "\"" + "}"));
+		result = resultActions
+				.andDo(print())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.confirmation_token").exists())
+				.andReturn();
+		String confirmation_token = JsonPath.read(result.getResponse().getContentAsString(),
+				"$.confirmation_token");
+
+		resultActions = this.mockMvc
+				.perform(post(API_PROJECT + "/auth/basic/confirm")
+						.header("Content-Type", MediaType.APPLICATION_JSON)
+						.content("{" + "\"client_id\": \"" + client_id + "\","
+								+ "\"confirmation_token\": \"" + confirmation_token + "\"" + "}"));
+		result = resultActions
+				.andDo(print())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.password").exists())
+				.andReturn();
+		String password = JsonPath.read(result.getResponse().getContentAsString(), "$.password");
+
+		resultActions = this.mockMvc
+				.perform(post(API_PROJECT + "/auth/basic/api_key")
+						.header("Content-Type", MediaType.APPLICATION_JSON)
+						.content("{" + "\"client_id\": \"" + client_id + "\","
+								+ "\"password\": \"" + password + "\""
+								+ "}"));
+		result = resultActions
+				.andDo(print())
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.api_key").exists())
+				.andReturn();
+		String api_key = JsonPath.read(result.getResponse().getContentAsString(), "$.api_key");
+
+		resultActions = this.mockMvc
+				.perform(post(API_PROJECT + "/auth/tsd/token")
+						.param("type", TokenType.IMPORT.name())
+						.header("authorization", "Bearer "
+								+ api_key)
+						.header("Content-Type", MediaType.APPLICATION_JSON)
+						.content("{" + "\"user_name\": \"" + userName + "\","
+								+ "\"otp\": \"113943\","
+								+ "\"password\": \"" + password + "\""
+								+ "}"));
+		result = resultActions
 				.andDo(print())
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.token").exists())
