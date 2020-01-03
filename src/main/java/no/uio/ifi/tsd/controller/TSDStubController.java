@@ -15,6 +15,7 @@ import java.nio.file.StandardOpenOption;
 import java.security.Key;
 import java.security.SecureRandom;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -244,8 +245,7 @@ public class TSDStubController {
 	public String getToken(
 			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
 			@RequestBody String data) throws IOException {
-		Map<String, String> tokenMap = new ObjectMapper().readValue(data, new TypeReference<>() {
-		});
+		HashMap<String, String> tokenMap = gson.fromJson(data, new HashMap<String, String>().getClass());
 		String type = tokenMap.get("type");
 		if (StringUtils.isEmpty(type) || StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER
 				.getValue())) {
