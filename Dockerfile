@@ -3,7 +3,7 @@ COPY pom.xml .
 RUN mvn dependency:go-offline
 
 COPY src/ /src/
-RUN mvn clean install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -DskipDockerPush -DskipDockerBuild
+RUN mvn clean install -Dmaven.javadoc.skip=true -B -V -DskipDockerPush -DskipDockerBuild
 
 FROM openjdk:13-alpine
 
