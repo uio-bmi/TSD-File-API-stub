@@ -1,8 +1,12 @@
-{
-  "properties": [
-    {
-      "name": "tsd.file.import",
-      "type": "java.lang.String",
-      "description": "Location for storing files and chunks uploaded to TSD File API should have %s for the project name variable."
+{"properties": [
+  {
+    "name": "tsd.file.import",
+    "type": "java.lang.String",
+    "description": "Location for storing files and chunks uploaded to TSD File API should have %s for the project name variable."
+  },
+  {
+    "name": "tsd.file.secretkey",
+    "type": "java.lang.String",
+    "description": "secret that will be used in signing and verifying JWT token"
   }
-] }
+]}
