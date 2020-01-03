@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+
 import java.security.Key;
 import java.security.SecureRandom;
 import java.util.Date;
@@ -20,9 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
-
-import javax.crypto.spec.SecretKeySpec;
-import javax.xml.bind.DatatypeConverter;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -51,14 +49,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.JwtBuilder;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.MalformedJwtException;
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.SignatureException;
-import io.jsonwebtoken.UnsupportedJwtException;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiParam;
 import io.swagger.annotations.ApiResponse;
@@ -73,6 +63,16 @@ import no.uio.ifi.tsd.model.ResumableUpload;
 import no.uio.ifi.tsd.model.ResumableUploadRepository;
 import no.uio.ifi.tsd.model.ResumableUploads;
 import no.uio.ifi.tsd.model.User;
+import javax.crypto.spec.SecretKeySpec;
+import javax.xml.bind.DatatypeConverter;
+import java.security.Key;
+
+import io.jsonwebtoken.*;
+
+import java.util.Date;
+
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.Claims;
 
 @RestController
 @RequestMapping("/v1/{project}")
@@ -269,8 +269,6 @@ public class TSDStubController {
 			throw new UnauthorizedException();
 		} else if (StringUtils.isEmpty(fileName)) {
 			return ResponseEntity.status(HttpStatus.OK).body(createJsonMessage(STREAM_PROCESSING_FAILED));
-		} else if (!verifyToken(authorization)) {
-			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(createJsonMessage(STREAM_PROCESSING_FAILED));
 		}
 		Path path = Paths.get(String.format(durableFileImport, project), fileName);
 		try {
@@ -295,8 +293,6 @@ public class TSDStubController {
 			throw new UnauthorizedException();
 		} else if (StringUtils.isEmpty(name)) {
 			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(createJsonMessage("miising name"));
-		} else if (!verifyToken(authorization)) {
-			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(createJsonMessage(STREAM_PROCESSING_FAILED));
 		}
 
 		Path path = Paths.get(String.format(durableFileImport, project), name);
@@ -321,8 +317,6 @@ public class TSDStubController {
 
 		if (StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
 			throw new UnauthorizedException();
-		} else if (!verifyToken(authorization)) {
-			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(createJsonMessage(STREAM_PROCESSING_FAILED));
 		}
 		ResumableUploads resumableChunks = readResumableChunks();
 		return ResponseEntity.status(HttpStatus.OK).body(gson.toJson(resumableChunks));
@@ -342,8 +336,6 @@ public class TSDStubController {
 			throw new UnauthorizedException();
 		} else if (StringUtils.isEmpty(fileName)) {
 			return ResponseEntity.status(HttpStatus.OK).body(createJsonMessage(STREAM_PROCESSING_FAILED));
-		} else if (!verifyToken(authorization)) {
-			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(createJsonMessage(STREAM_PROCESSING_FAILED));
 		}
 		if (id == null) {
 			id = repository.save(new ResumableUpload()).getId();
@@ -392,8 +384,6 @@ public class TSDStubController {
 			throw new UnauthorizedException();
 		} else if (StringUtils.isEmpty(fileName)) {
 			return ResponseEntity.status(HttpStatus.OK).body(createJsonMessage(STREAM_PROCESSING_FAILED));
-		} else if (!verifyToken(authorization)) {
-			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(createJsonMessage(STREAM_PROCESSING_FAILED));
 		}
 		if (StringUtils.isEmpty(id)) {
 			return badRequestCannotDelete();
@@ -420,6 +410,7 @@ public class TSDStubController {
 		}
 		return true;
 	}
+
 
 	private ResponseEntity<String> badRequestCannotDelete() {
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(createJsonMessage(CANNOT_DELETE_RESUMABLE));
