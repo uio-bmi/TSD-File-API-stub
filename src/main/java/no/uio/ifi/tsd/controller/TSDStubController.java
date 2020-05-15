@@ -348,6 +348,21 @@ public class TSDStubController {
 		return ResponseEntity.status(HttpStatus.OK).body(gson.toJson(resumableChunks));
 	}
 
+	@GetMapping(value = "/ega/{userName}/resumables", produces = MediaType.APPLICATION_JSON_VALUE)
+	@ResponseBody()
+	public ResponseEntity<String> getResumableUploads(
+			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization) {
+		log.info("upload");
+
+		if (StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
+			throw new UnauthorizedException();
+		} else if (!verifyToken(authorization)) {
+			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(createJsonMessage(STREAM_PROCESSING_FAILED));
+		}
+		ResumableUploads resumableChunks = readResumableChunks();
+		return ResponseEntity.status(HttpStatus.OK).body(gson.toJson(resumableChunks));
+	}
+
 	@PatchMapping(value = "/files/stream/{filename}", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
 	@ResponseBody()
 	public ResponseEntity<String> handleResumableUpload(
