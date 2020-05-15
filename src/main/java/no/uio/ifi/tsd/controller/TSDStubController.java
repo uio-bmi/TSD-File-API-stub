@@ -24,6 +24,8 @@ import java.util.stream.Collectors;
 import javax.crypto.spec.SecretKeySpec;
 import javax.xml.bind.DatatypeConverter;
 
+import com.auth0.jwt.JWT;
+import io.jsonwebtoken.*;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.json.JSONObject;
@@ -51,14 +53,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.JwtBuilder;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.MalformedJwtException;
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.SignatureException;
-import io.jsonwebtoken.UnsupportedJwtException;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiParam;
 import io.swagger.annotations.ApiResponse;
@@ -94,6 +88,9 @@ public class TSDStubController {
 
 	@Value("${tsd.file.import}")
 	public String durableFileImport;
+
+	@Value("${tsd.elixir.import}")
+	public String elixirFileImport;
 
 	private static String SECRET_KEY;
 
@@ -256,6 +253,29 @@ public class TSDStubController {
 		}
 	}
 
+	@ApiResponses(value = { @ApiResponse(code = 200, message = "token retrieved succesfully"),
+			@ApiResponse(code = 401, message = "You are not authorized to get token"), })
+	@PostMapping(value = "/auth/elixir/token", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+	@ResponseBody
+	public String getToken(
+			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
+			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
+			@RequestBody Map<String, String> data) {
+		String elixirToken = data.get("idtoken");
+		String userName = JWT.decode(elixirToken).getSubject();
+
+		if (StringUtils.isEmpty(userName)  || StringUtils.isEmpty(authorization) ||
+				!authorization.startsWith(BEARER.getValue())) {
+			throw new UnauthorizedException();
+		} else {
+			if (!verifyToken(authorization)) {
+				throw new UnauthorizedException();
+			}
+			String jwtToken = createJWT(userName, "TSD", userName, ONE_HOUR);
+			return new JSONObject().put("token", jwtToken).toString();
+		}
+	}
+
 	@PutMapping(value = "/files/stream", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
 	@ResponseBody()
 	public ResponseEntity<String> upload(
@@ -349,6 +369,59 @@ public class TSDStubController {
 			id = repository.save(new ResumableUpload()).getId();
 		}
 		File uploadFolder = generateUploadFolder(String.format(durableFileImport, project), id);
+		ResumableUploads resumableChunks = readResumableChunks();
+
+		Chunk newChunk = createChunk(fileName, chunk, id);
+		ResumableUpload resumableUpload;
+
+		if (chunk.equals("1")) {
+			log.info("initializing chunk");
+			File chunkFile = saveChunk(uploadFolder, fileName, content);
+			resumableUpload = updateResumableUpload(createResumableUpload(newChunk), chunkFile);
+			resumableChunks.getResumables().add(resumableUpload);
+		} else if ("end".equalsIgnoreCase(chunk)) {
+			log.info("finalizing chunk");
+			finalizeChunks(uploadFolder, id, resumableChunks, project);
+		} else {
+			log.info("Upload chunks");
+			resumableUpload = getResumableUpload(id);
+			BigInteger maxChunk = new BigInteger(chunk);
+			if (!maxChunk.subtract(resumableUpload.getMaxChunk()).equals(BigInteger.ONE)) {
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(createJsonMessage(CHUNK_ORDER_INCORRECT));
+			}
+			resumableUpload.setMaxChunk(maxChunk);
+			File chunkFile = saveChunk(uploadFolder, chunk, resumableUpload.getFileName(), content);
+			updateResumableUpload(resumableUpload, chunkFile);
+			updateResumableChunks(resumableChunks, resumableUpload, newChunk);
+			log.info(resumableChunks.toString());
+		}
+
+		log.info(gson.toJson(newChunk));
+		return ResponseEntity.status(HttpStatus.CREATED).body(gson.toJson(newChunk));
+	}
+
+	@PatchMapping(value = "/ega/{userName}/files/{fileName}", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+	@ResponseBody()
+	public ResponseEntity<String> handleResumableUpload(
+			@ApiParam(value = "project ID ", required = true, example = PROJECT) @PathVariable String project,
+			@ApiParam(value = "Authorization of type bearer", example = "Bearer tokensdgdfgdfgfdg") @RequestHeader(required = false) String authorization,
+			@ApiParam(value = "UserName", example = "p11-dummy@elixir-europe.org") @PathVariable String userName,
+			@ApiParam(value = "FileName", example = "name.ext") @PathVariable String fileName,
+			@ApiParam(value = "chunk", example = "1") @RequestParam String chunk,
+			@RequestParam(value = "id", required = false) String id,
+			@RequestBody(required = false) byte[] content) throws IOException {
+		log.info("upload chunk");
+		if (StringUtils.isEmpty(authorization) || !authorization.startsWith(BEARER.getValue())) {
+			throw new UnauthorizedException();
+		} else if (StringUtils.isEmpty(fileName)) {
+			return ResponseEntity.status(HttpStatus.OK).body(createJsonMessage(STREAM_PROCESSING_FAILED));
+		} else if (!verifyToken(authorization)) {
+			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(createJsonMessage(STREAM_PROCESSING_FAILED));
+		}
+		if (id == null) {
+			id = repository.save(new ResumableUpload()).getId();
+		}
+		File uploadFolder = generateUploadFolder(String.format(elixirFileImport, project, userName), id);
 		ResumableUploads resumableChunks = readResumableChunks();
 
 		Chunk newChunk = createChunk(fileName, chunk, id);
@@ -573,6 +646,7 @@ public class TSDStubController {
 				.setIssuedAt(now)
 				.setSubject(subject)
 				.setIssuer(issuer)
+				.addClaims(Map.of("user", PROJECT + "-" + subject))
 				.signWith(signatureAlgorithm, signingKey);
 
 		if (ttlMillis > 0) {
