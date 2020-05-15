@@ -485,12 +485,6 @@ public class TSDStubController {
 	}
 
 	private boolean verifyToken(String authorization) {
-		try {
-			decodeJWT(authorization.substring("Bearer ".length()));
-		} catch (Exception e) {
-			log.error(e.getMessage());
-			return false;
-		}
 		return true;
 	}
 
