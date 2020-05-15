@@ -49,8 +49,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 
 import io.swagger.annotations.Api;
@@ -396,7 +394,7 @@ public class TSDStubController {
 			resumableChunks.getResumables().add(resumableUpload);
 		} else if ("end".equalsIgnoreCase(chunk)) {
 			log.info("finalizing chunk");
-			finalizeChunks(uploadFolder, id, resumableChunks, project);
+			finalizeChunks(null, uploadFolder, id, resumableChunks, project);
 		} else {
 			log.info("Upload chunks");
 			resumableUpload = getResumableUpload(id);
@@ -449,7 +447,7 @@ public class TSDStubController {
 			resumableChunks.getResumables().add(resumableUpload);
 		} else if ("end".equalsIgnoreCase(chunk)) {
 			log.info("finalizing chunk");
-			finalizeChunks(uploadFolder, id, resumableChunks, project);
+			finalizeChunks(userName, uploadFolder, id, resumableChunks, project);
 		} else {
 			log.info("Upload chunks");
 			resumableUpload = getResumableUpload(id);
@@ -573,11 +571,11 @@ public class TSDStubController {
 		return saveChunk(uploadFolder, "1", fileName, content);
 	}
 
-	private void finalizeChunks(File uploadFolder, String id, ResumableUploads resumableChunks, String project)
+	private void finalizeChunks(String userName, File uploadFolder, String id, ResumableUploads resumableChunks, String project)
 			throws IOException {
 		ResumableUpload resumable = getResumableUpload(id);
 		try {
-			mergeFiles(uploadFolder, resumable, project);
+			mergeFiles(userName, uploadFolder, resumable, project);
 		} catch (IOException e) {
 			log.error(e.getMessage());
 			throw e;
@@ -599,9 +597,15 @@ public class TSDStubController {
 		return uploadDir;
 	}
 
-	private void mergeFiles(File dir, ResumableUpload resumable, String project) throws IOException {
+	private void mergeFiles(String userName, File dir, ResumableUpload resumable, String project) throws IOException {
 		String fileName = resumable.getFileName();
-		File uploadedFile = new File(String.format(durableFileImport, project), fileName);
+		File uploadedFile;
+		if (userName == null) {
+			uploadedFile = new File(String.format(durableFileImport, project), fileName);
+		} else {
+			uploadedFile = new File(String.format(elixirFileImport, project, userName), fileName);
+		}
+
 		try (OutputStream outputStream = Files.newOutputStream(Paths.get(uploadedFile.getAbsolutePath()),
 				StandardOpenOption.CREATE, StandardOpenOption.APPEND);) {
 			for (int i = 1; i <= resumable.getMaxChunk().intValue(); i++) {
